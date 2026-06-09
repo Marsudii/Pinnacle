@@ -77,7 +77,17 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Pinnacle ${{ github.ref_name }}"
-          releaseBody: "See the assets below to download the installer for your platform."
+          releaseBody: |
+            ## Pinnacle ${{ github.ref_name }}
+
+            See the assets below to download the installer for your platform.
+
+            ### macOS Users
+            If you get **"Pinnacle is damaged and can't be opened"**, run this in Terminal after extracting:
+            ```bash
+            xattr -cr /path/to/Pinnacle.app
+            ```
+            Or go to **System Settings → Privacy & Security** and click **Open Anyway**.
           releaseDraft: true
           prerelease: false
           args: --target ${{ matrix.target }}
