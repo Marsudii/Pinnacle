@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useConnectionStore } from '../../../state/connectionStore'
-import type { ConnectionProfile } from '../../../types/domain'
+import type { ConnectionProfile, ElasticIndex } from '../../../types/domain'
 import type { ConnectionStatus, ContextMenuState, TableInfoTab, QueryResultTab, DetailStat } from '../types'
 import { downloadTextFile } from '../utils'
 import { useExplorerData } from '../hooks/useExplorerData'
@@ -10,7 +10,9 @@ import { DetailsPanel } from '../components/DetailsPanel'
 import { SqlExplorerWorkspace } from '../components/db/sql/SqlExplorerWorkspace'
 import { RedisWorkspaceNotice } from '../components/db/redis/RedisWorkspaceNotice'
 import { RabbitMqWorkspaceNotice } from '../components/db/rabbitmq/RabbitMqWorkspaceNotice'
-import { ElasticsearchWorkspaceNotice } from '../components/db/elasticsearch/ElasticsearchWorkspaceNotice'
+import { elasticListIndices } from '../../../services/tauriClient'
+import { ElasticExplorerWorkspace } from '../components/db/elasticsearch/ElasticExplorerWorkspace'
+import type { ElasticPanel, ElasticIndexTab } from '../components/db/elasticsearch/ElasticExplorerWorkspace'
 import { MongodbWorkspaceNotice } from '../components/db/mongodb/MongodbWorkspaceNotice'
 import { ConnectionWizardModal } from '../components/ConnectionWizardModal'
 import { ContextMenu } from '../components/ContextMenu'
@@ -49,6 +51,75 @@ export function DataExplorerPage() {
   const [openedTableTabs, setOpenedTableTabs] = useState<OpenedTableTab[]>([])
   const [activeTableTabId, setActiveTableTabId] = useState<string | null>(null)
   const [isDetailsPanelOpen, setIsDetailsPanelOpen] = useState(false)
+  const [elasticPanel, setElasticPanel] = useState<ElasticPanel>('cluster')
+  const [selectedElasticIndex, setSelectedElasticIndex] = useState<string | null>(null)
+  const [elasticIndices, setElasticIndices] = useState<Record<string, ElasticIndex[]>>({})
+  const [openedElasticTabs, setOpenedElasticTabs] = useState<ElasticIndexTab[]>([])
+  const [activeElasticTabId, setActiveElasticTabId] = useState<string | null>(null)
+
+  // Sidebar resize state
+  const [sidebarWidth, setSidebarWidth] = useState(280)
+  const [isResizing, setIsResizing] = useState(false)
+
+  // ── Fetch Elasticsearch indices when an ES connection is expanded ──
+  useEffect(() => {
+    if (!expandedConnectionId) return
+    const conn = items.find((item) => item.id === expandedConnectionId)
+    if (!conn || conn.type !== 'elasticsearch') return
+
+    const payload = {
+      type: conn.type,
+      host: conn.host,
+      port: conn.port,
+      database: conn.database ?? '',
+      username: conn.username,
+      password: conn.password,
+      ssl: conn.ssl ?? false,
+    }
+
+    elasticListIndices(payload)
+      .then((indices) => {
+        setElasticIndices((prev) => ({
+          ...prev,
+          [conn.id]: indices ?? [],
+        }))
+      })
+      .catch(() => {
+        // silently ignore – sidebar will show empty children
+      })
+  }, [expandedConnectionId, items])
+
+  // ── Sidebar resize handlers ────────────────────────────────────────
+
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    setIsResizing(true)
+  }, [])
+
+  useEffect(() => {
+    if (!isResizing) return
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const newWidth = Math.min(500, Math.max(200, e.clientX))
+      setSidebarWidth(newWidth)
+    }
+
+    const handleMouseUp = () => {
+      setIsResizing(false)
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+  }, [isResizing])
 
   // ── Derived state ──────────────────────────────────────────────────
 
@@ -174,6 +245,10 @@ export function DataExplorerPage() {
     setOpenedTableTabs([])
     setActiveTableTabId(null)
     setSelectedTreeNode(null)
+    setElasticPanel('cluster')
+    setSelectedElasticIndex(null)
+    setOpenedElasticTabs([])
+    setActiveElasticTabId(null)
     explorerData.setSelectedTable(null)
   }
 
@@ -270,10 +345,46 @@ export function DataExplorerPage() {
     }
   }
 
+  /** Map sidebar label to elastic panel key */
+  const ELASTIC_LABEL_TO_PANEL: Record<string, ElasticPanel> = {
+    'Cluster': 'cluster',
+    'Indices': 'indices',
+    'Query Console': 'query',
+    'Mapping': 'mapping',
+  }
+
   const wrappedHandleTreeNodeClick = (nodeLabel: string, databaseName?: string, nodePath?: string) => {
     if (nodePath?.endsWith('/Queries')) {
       openQueryTabFromTree(databaseName)
       return
+    }
+
+    // Handle elasticsearch sidebar navigation
+    if (selectedConnection?.type === 'elasticsearch') {
+      // Check if clicking an index child (path like "Indices/indexName")
+      if (nodePath?.startsWith('Indices/')) {
+        setElasticPanel('documents')
+        setSelectedElasticIndex(nodeLabel)
+        setSelectedTreeNode(nodeLabel)
+        // Open or activate an index tab (like SQL table tabs)
+        const existingTab = openedElasticTabs.find((tab) => tab.indexName === nodeLabel)
+        if (existingTab) {
+          setActiveElasticTabId(existingTab.id)
+        } else {
+          const tabId = crypto.randomUUID()
+          setOpenedElasticTabs((prev) => [...prev, { id: tabId, indexName: nodeLabel }])
+          setActiveElasticTabId(tabId)
+        }
+        return
+      }
+      if (ELASTIC_LABEL_TO_PANEL[nodeLabel]) {
+        setElasticPanel(ELASTIC_LABEL_TO_PANEL[nodeLabel])
+        setSelectedElasticIndex(null)
+        setSelectedTreeNode(nodeLabel)
+        // Clear active elastic tab when switching to non-index panels
+        setActiveElasticTabId(null)
+        return
+      }
     }
 
     setSelectedTreeNode(nodeLabel)
@@ -351,51 +462,141 @@ export function DataExplorerPage() {
     setActiveQueryTabId(tabId)
   }
 
+  const handleCloseElasticTab = (tabId: string) => {
+    setOpenedElasticTabs((prev) => {
+      const nextTabs = prev.filter((tab) => tab.id !== tabId)
+
+      if (activeElasticTabId === tabId) {
+        const fallbackTab = nextTabs[nextTabs.length - 1] ?? null
+        setActiveElasticTabId(fallbackTab?.id ?? null)
+        if (fallbackTab) {
+          setSelectedElasticIndex(fallbackTab.indexName)
+        } else {
+          setSelectedElasticIndex(null)
+        }
+      }
+
+      return nextTabs
+    })
+  }
+
+  const handleActiveElasticTabIdChange = (tabId: string) => {
+    const targetTab = openedElasticTabs.find((tab) => tab.id === tabId)
+    if (!targetTab) return
+
+    setActiveElasticTabId(tabId)
+    setSelectedElasticIndex(targetTab.indexName)
+    setSelectedTreeNode(targetTab.indexName)
+  }
+
   // ── Render ─────────────────────────────────────────────────────────
 
   return (
     <div className="h-full flex flex-col">
       <section className="flex-1 overflow-hidden border-slate-200 bg-white shadow-sm">
-        <div
-          className={
-            isDetailsPanelOpen
-              ? 'grid h-full min-h-0 grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)_320px]'
-              : 'grid h-full min-h-0 grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)]'
-          }
-        >
-          <ConnectionSidebar
-            search={search}
-            onSearchChange={setSearch}
-            groupedConnections={groupedConnections}
-            selectedConnection={selectedConnection}
-            connectionStatuses={connectionStatuses}
-            expandedConnectionId={expandedConnectionId}
-            treeLoading={explorerData.treeLoading}
-            selectedTreeNode={selectedTreeNode}
-            savedQueries={savedQueriesByConnection}
-            onOpenCreateWizard={openCreateWizard}
-            onSelectConnection={handleConnectionSelectionChange}
-            onToggleExpand={(id) => setExpandedConnectionId(expandedConnectionId === id ? null : id)}
-            onContextMenu={(event, itemId) =>
-              setContextMenu({ x: event.clientX, y: event.clientY, itemId })
-            }
-            getTreeNodesForConnection={getTreeNodesForConnection}
-            onTreeNodeClick={wrappedHandleTreeNodeClick}
-            onSelectedTreeNode={setSelectedTreeNode}
-            expandedTreePaths={expandedTreePaths}
-            onToggleTreeNode={handleToggleTreeNode}
-            onFetchDatabaseDetails={handleFetchDatabaseDetails}
-            onUseSavedQuery={applySavedQueryToActiveTab}
-          />
+        <div className="flex h-full min-h-0 flex-col lg:flex-row">
+          {/* Sidebar with dynamic width */}
+          <div
+            style={{ width: sidebarWidth }}
+            className="hidden lg:block shrink-0 overflow-x-hidden overflow-y-auto border-r border-slate-200 min-w-0"
+          >
+            <ConnectionSidebar
+              search={search}
+              onSearchChange={setSearch}
+              groupedConnections={groupedConnections}
+              selectedConnection={selectedConnection}
+              expandedConnectionId={expandedConnectionId}
+              treeLoading={explorerData.treeLoading}
+              selectedTreeNode={selectedTreeNode}
+              savedQueries={savedQueriesByConnection}
+              onOpenCreateWizard={openCreateWizard}
+              onSelectConnection={handleConnectionSelectionChange}
+              onToggleExpand={(id) => setExpandedConnectionId(expandedConnectionId === id ? null : id)}
+              onContextMenu={(event, itemId) =>
+                setContextMenu({ x: event.clientX, y: event.clientY, itemId })
+              }
+              getTreeNodesForConnection={getTreeNodesForConnection}
+              onTreeNodeClick={wrappedHandleTreeNodeClick}
+              onSelectedTreeNode={setSelectedTreeNode}
+              expandedTreePaths={expandedTreePaths}
+              onToggleTreeNode={handleToggleTreeNode}
+              onFetchDatabaseDetails={handleFetchDatabaseDetails}
+              onUseSavedQuery={applySavedQueryToActiveTab}
+              elasticIndices={elasticIndices}
+            />
+          </div>
+
+          {/* Mobile sidebar */}
+          <div className="lg:hidden shrink-0">
+            <ConnectionSidebar
+              search={search}
+              onSearchChange={setSearch}
+              groupedConnections={groupedConnections}
+              selectedConnection={selectedConnection}
+              expandedConnectionId={expandedConnectionId}
+              treeLoading={explorerData.treeLoading}
+              selectedTreeNode={selectedTreeNode}
+              savedQueries={savedQueriesByConnection}
+              onOpenCreateWizard={openCreateWizard}
+              onSelectConnection={handleConnectionSelectionChange}
+              onToggleExpand={(id) => setExpandedConnectionId(expandedConnectionId === id ? null : id)}
+              onContextMenu={(event, itemId) =>
+                setContextMenu({ x: event.clientX, y: event.clientY, itemId })
+              }
+              getTreeNodesForConnection={getTreeNodesForConnection}
+              onTreeNodeClick={wrappedHandleTreeNodeClick}
+              onSelectedTreeNode={setSelectedTreeNode}
+              expandedTreePaths={expandedTreePaths}
+              onToggleTreeNode={handleToggleTreeNode}
+              onFetchDatabaseDetails={handleFetchDatabaseDetails}
+              onUseSavedQuery={applySavedQueryToActiveTab}
+              elasticIndices={elasticIndices}
+            />
+          </div>
+
+          {/* Resize handle (desktop only) */}
+          <div
+            onMouseDown={handleResizeStart}
+            className={[
+              'hidden lg:block w-1 shrink-0 cursor-col-resize relative',
+              isResizing ? 'bg-blue-400' : 'bg-transparent hover:bg-blue-300',
+            ].join(' ')}
+          >
+            <div className="absolute inset-y-0 -left-1 -right-1" />
+          </div>
 
           <main
             className={[
-              'flex flex-col overflow-hidden border-b border-slate-200 lg:border-b-0 lg:border-r',
+              'flex-1 min-w-0 flex flex-col overflow-hidden border-b border-slate-200 lg:border-b-0',
             ].join(' ')}
           >
             {!selectedConnection ? (
-              <section className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
-                Select or create a connection to open explorer workspace.
+              <section className="flex items-center justify-center h-full">
+                <div className="flex flex-col items-center gap-4 text-center max-w-md px-6">
+                  <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-slate-100 border border-slate-200">
+                    <svg
+                      className="w-8 h-8 text-slate-400"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      strokeWidth={1.5}
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125"
+                      />
+                    </svg>
+                  </div>
+                  <div className="space-y-1.5">
+                    <h3 className="text-base font-semibold text-slate-700">
+                      No Connection Selected
+                    </h3>
+                    <p className="text-sm text-slate-500 leading-relaxed">
+                      Select a connection from the sidebar or create a new one to start exploring your database.
+                    </p>
+                  </div>
+                </div>
               </section>
             ) : (
               <div className="flex-1 min-h-0 flex flex-col space-y-4 overflow-hidden">
@@ -466,7 +667,29 @@ export function DataExplorerPage() {
                   />
                 )}
 
-                {selectedConnection.type === 'elasticsearch' && <ElasticsearchWorkspaceNotice />}
+                {selectedConnection.type === 'elasticsearch' && (
+                  <ElasticExplorerWorkspace
+                    payload={{
+                      type: selectedConnection.type,
+                      host: selectedConnection.host,
+                      port: selectedConnection.port,
+                      database: selectedConnection.database ?? '',
+                      username: selectedConnection.username,
+                      password: selectedConnection.password,
+                      ssl: selectedConnection.ssl ?? false,
+                    }}
+                    activePanel={elasticPanel}
+                    selectedIndex={selectedElasticIndex}
+                    onSelectIndex={(name: string) => {
+                      setElasticPanel('documents')
+                      setSelectedElasticIndex(name)
+                    }}
+                    openedElasticTabs={openedElasticTabs}
+                    activeElasticTabId={activeElasticTabId}
+                    onActiveElasticTabIdChange={handleActiveElasticTabIdChange}
+                    onCloseElasticTab={handleCloseElasticTab}
+                  />
+                )}
 
                 {selectedConnection.type === 'mongodb' && <MongodbWorkspaceNotice />}
               </div>

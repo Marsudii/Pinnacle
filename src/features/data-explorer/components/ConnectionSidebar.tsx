@@ -1,14 +1,22 @@
 import {
+  Activity,
+  Braces,
   ChevronRight,
   Database,
   FileText,
+  Hash,
+  Layers,
   Loader2,
+  List,
+  MessageSquare,
   Plus,
   Search,
   Table,
+  Terminal,
+  Zap,
 } from "lucide-react";
-import type { ConnectionProfile } from "../../../types/domain";
-import type { ConnectionStatus, TreeNode, SavedQuery } from "../types";
+import type { ConnectionProfile, ConnectionType, ElasticIndex } from "../../../types/domain";
+import type { TreeNode, SavedQuery } from "../types";
 import { databaseTypeOptions } from "../constants";
 import { isSqlConnectionType } from "../utils";
 
@@ -17,7 +25,6 @@ interface ConnectionSidebarProps {
   onSearchChange: (value: string) => void;
   groupedConnections: Record<string, ConnectionProfile[]>;
   selectedConnection: ConnectionProfile | null;
-  connectionStatuses: Record<string, ConnectionStatus>;
   expandedConnectionId: string | null;
   treeLoading: Record<string, boolean>;
   selectedTreeNode: string | null;
@@ -37,12 +44,102 @@ interface ConnectionSidebarProps {
   onToggleTreeNode: (path: string) => void;
   onFetchDatabaseDetails?: (dbName: string) => void;
   onUseSavedQuery?: (sql: string) => void;
+  /** Elasticsearch indices per connection id */
+  elasticIndices?: Record<string, ElasticIndex[]>;
 }
 
-const CATEGORY_LABELS = ["Tables", "Views", "Functions", "Queries"];
+const CATEGORY_LABELS = [
+  "Tables",
+  "Views",
+  "Functions",
+  "Queries",
+  "Keys",
+  "Indexes",
+  "Exchanges",
+  "Queues",
+  "Channels",
+  // Elasticsearch
+  "Cluster",
+  "Indices",
+  "Query Console",
+  "Mapping",
+];
 
 function isCategoryNode(label: string): boolean {
   return CATEGORY_LABELS.includes(label);
+}
+
+/**
+ * Returns static tree nodes for non-SQL connection types.
+ * SQL types (postgresql, mysql) use dynamic tree from getTreeNodesForConnection.
+ * @param indices - optional Elasticsearch indices to populate the "Indices" node children.
+ */
+function getStaticTreeNodes(type: ConnectionType, indices?: ElasticIndex[]): TreeNode[] {
+  switch (type) {
+    case "redis":
+      return [
+        { label: "Keys", children: [] },
+        { label: "Indexes", children: [] },
+        { label: "Queries", children: [] },
+      ];
+    case "mongodb":
+      return [
+        { label: "Tables", children: [] },
+        { label: "Views", children: [] },
+        { label: "Indexes", children: [] },
+        { label: "Queries", children: [] },
+      ];
+    case "elasticsearch":
+      return [
+        { label: "Cluster", children: [] },
+        {
+          label: "Indices",
+          children: indices
+            ? indices
+                .filter((idx) => !idx.index.startsWith("."))
+                .map((idx) => ({ label: idx.index }))
+            : [],
+        },
+        { label: "Query Console", children: [] },
+        { label: "Mapping", children: [] },
+      ];
+    case "rabbitmq":
+      return [
+        { label: "Exchanges", children: [] },
+        { label: "Queues", children: [] },
+        { label: "Channels", children: [] },
+      ];
+    default:
+      return [];
+  }
+}
+
+/**
+ * Returns an icon component to use for a given category label.
+ */
+function getCategoryIcon(label: string) {
+  switch (label) {
+    case "Keys":
+      return <Hash size={11} className="shrink-0 text-purple-500" />;
+    case "Indexes":
+      return <Zap size={11} className="shrink-0 text-orange-500" />;
+    case "Cluster":
+      return <Activity size={11} className="shrink-0 text-emerald-500" />;
+    case "Indices":
+      return <Database size={11} className="shrink-0 text-sky-500" />;
+    case "Query Console":
+      return <Terminal size={11} className="shrink-0 text-amber-500" />;
+    case "Mapping":
+      return <Braces size={11} className="shrink-0 text-violet-500" />;
+    case "Exchanges":
+      return <Layers size={11} className="shrink-0 text-green-500" />;
+    case "Queues":
+      return <List size={11} className="shrink-0 text-sky-500" />;
+    case "Channels":
+      return <MessageSquare size={11} className="shrink-0 text-pink-500" />;
+    default:
+      return null;
+  }
 }
 
 function TreeNodeItem({
@@ -85,9 +182,18 @@ function TreeNodeItem({
     isLeaf && !isCategoryNode(node.label) && parentPath.endsWith("/Tables");
   const isDbOpen = isDatabaseNode && isExpanded;
   const isQueriesFolder = node.label === "Queries";
+  const categoryIcon = isCategoryNode(node.label)
+    ? getCategoryIcon(node.label)
+    : null;
 
   const handleClick = () => {
-    if (isDatabaseNode) {
+    if (isDatabaseNode && isCategoryNode(node.label)) {
+      // ES-style category nodes at depth 0 (Cluster, Indices, Documents, etc.)
+      // Navigate to panel and toggle expansion
+      onSelectedTreeNode(node.label);
+      onToggleTreeNode(nodePath);
+      onTreeNodeClick(node.label, undefined, nodePath);
+    } else if (isDatabaseNode) {
       onToggleTreeNode(nodePath);
       if (!isExpanded) {
         onFetchDatabaseDetails?.(node.label);
@@ -117,16 +223,15 @@ function TreeNodeItem({
           handleClick();
         }}
         className={[
-          "flex w-full items-center gap-1 rounded px-2 py-1 text-[11px] font-medium hover:bg-slate-100",
+          "flex w-full items-center gap-1 px-2 py-1 text-[11px] font-medium hover:bg-slate-100 overflow-hidden",
           selectedTreeNode === node.label
             ? "bg-blue-50 text-blue-600"
             : "text-slate-600",
         ].join(" ")}
-        style={{ paddingLeft: `${depth * 12 + 8}px` }}
+        style={{ paddingLeft: `${depth * 12 + 18}px` }}
       >
-        {isTableItem ? (
-          <Table size={11} className="shrink-0 text-blue-500" />
-        ) : hasChildren || isLeaf ? (
+        {/* Chevron indicator for expandable nodes with children (left-most) */}
+        {hasChildren && !isLeaf ? (
           <ChevronRight
             size={11}
             className={[
@@ -134,14 +239,21 @@ function TreeNodeItem({
               isExpanded ? "rotate-90" : "",
             ].join(" ")}
           />
-        ) : null}
-        {isDatabaseNode && (
+        ) : (
+          <span className="shrink-0" style={{ width: 11 }} />
+        )}
+        {/* Primary icon */}
+        {isTableItem ? (
+          <Table size={11} className="shrink-0 text-blue-500" />
+        ) : categoryIcon ? (
+          categoryIcon
+        ) : isDatabaseNode ? (
           <Database
             size={11}
             className={`shrink-0 ${isDbOpen ? "text-green-500" : "text-slate-400"}`}
           />
-        )}
-        {node.label}
+        ) : null}
+        <span className="truncate min-w-0">{node.label}</span>
       </button>
       {isExpanded &&
         (isQueriesFolder ? (
@@ -157,7 +269,7 @@ function TreeNodeItem({
                     onUseSavedQuery?.(sq.sql);
                   }}
                   className={[
-                    "flex w-full items-center gap-1 rounded px-2 py-1 text-[11px] hover:bg-slate-100",
+                    "flex w-full items-center gap-1 rounded px-2 py-1 text-[11px] hover:bg-slate-100 overflow-hidden",
                     selectedTreeNode === sq.id
                       ? "bg-blue-50 text-blue-600"
                       : "text-slate-600",
@@ -226,10 +338,11 @@ export function ConnectionSidebar({
   onToggleTreeNode,
   onFetchDatabaseDetails,
   onUseSavedQuery,
+  elasticIndices,
 }: ConnectionSidebarProps) {
   return (
-    <aside className="border-b border-slate-200 p-3 lg:border-b-0 lg:border-r lg:overflow-y-auto">
-      <div className="mb-2 flex items-center justify-between">
+    <aside className="h-full overflow-x-hidden overflow-y-auto min-w-0">
+      <div className="mb-2 flex items-center justify-between px-3 pt-3">
         <p className="text-sm font-semibold text-slate-700">Connections</p>
         <button
           type="button"
@@ -240,7 +353,7 @@ export function ConnectionSidebar({
         </button>
       </div>
 
-      <label className="relative mb-3 block">
+      <label className="relative mb-3 block mx-3">
         <Search
           size={14}
           className="pointer-events-none absolute left-3 top-2.5 text-slate-400"
@@ -249,14 +362,14 @@ export function ConnectionSidebar({
           value={search}
           onChange={(event) => onSearchChange(event.target.value)}
           placeholder="Search connections"
-          className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-8 pr-3 text-xs text-slate-700"
+          className="w-full rounded-xl border border-slate-200 bg-white py-2 focus:outline-none focus:ring-1 focus:ring-blue-500 pl-8 pr-3 text-xs text-slate-700"
         />
       </label>
 
       <div className="space-y-3">
         {Object.entries(groupedConnections).map(([group, profiles]) => (
           <section key={group}>
-            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400 px-3">
               {group}
             </p>
             <div className="space-y-1">
@@ -267,6 +380,17 @@ export function ConnectionSidebar({
                 )?.logoSrc;
                 const isLoading = treeLoading[item.id];
                 const connectionSavedQueries = savedQueries[item.id] ?? [];
+
+                // Get tree nodes based on connection type
+                const sqlTreeNodes = isSqlConnectionType(item.type)
+                  ? getTreeNodesForConnection(item)
+                  : [];
+                const connectionIndices = elasticIndices?.[item.id];
+                const staticTreeNodes = isSqlConnectionType(item.type)
+                  ? []
+                  : getStaticTreeNodes(item.type, connectionIndices);
+                const treeNodes =
+                  sqlTreeNodes.length > 0 ? sqlTreeNodes : staticTreeNodes;
 
                 return (
                   <div key={item.id}>
@@ -281,7 +405,7 @@ export function ConnectionSidebar({
                         onContextMenu(event, item.id);
                       }}
                       className={[
-                        "w-full px-2 py-2 text-left transition hover:bg-slate-100 rounded-lg",
+                        "w-full px-3 py-2 text-left transition hover:bg-slate-100 overflow-hidden",
                         active ? "bg-blue-100" : "",
                       ].join(" ")}
                     >
@@ -325,33 +449,31 @@ export function ConnectionSidebar({
                         )}
                       </span>
                     </button>
-                    {expandedConnectionId === item.id &&
-                      isSqlConnectionType(item.type) && (
-                        <div className="ml-4 mt-1 space-y-0.5 border-l border-slate-200">
-                          {getTreeNodesForConnection(item).length === 0 &&
-                            !treeLoading[item.id] && (
-                              <p className="px-2 py-1 text-[11px] text-slate-400 italic">
-                                No metadata available
-                              </p>
-                            )}
-                          {getTreeNodesForConnection(item).map((node) => (
-                            <TreeNodeItem
-                              key={node.label}
-                              node={node}
-                              depth={0}
-                              parentPath=""
-                              selectedTreeNode={selectedTreeNode}
-                              expandedTreePaths={expandedTreePaths}
-                              onTreeNodeClick={onTreeNodeClick}
-                              onSelectedTreeNode={onSelectedTreeNode}
-                              onToggleTreeNode={onToggleTreeNode}
-                              onFetchDatabaseDetails={onFetchDatabaseDetails}
-                              savedQueries={connectionSavedQueries}
-                              onUseSavedQuery={onUseSavedQuery}
-                            />
-                          ))}
-                        </div>
-                      )}
+                    {expandedConnectionId === item.id && (
+                      <div className="border-l-2 border-blue-200">
+                        {treeNodes.length === 0 && !treeLoading[item.id] && (
+                          <p className="px-2 py-1 text-[11px] text-slate-400 italic">
+                            No metadata available
+                          </p>
+                        )}
+                        {treeNodes.map((node) => (
+                          <TreeNodeItem
+                            key={node.label}
+                            node={node}
+                            depth={0}
+                            parentPath=""
+                            selectedTreeNode={selectedTreeNode}
+                            expandedTreePaths={expandedTreePaths}
+                            onTreeNodeClick={onTreeNodeClick}
+                            onSelectedTreeNode={onSelectedTreeNode}
+                            onToggleTreeNode={onToggleTreeNode}
+                            onFetchDatabaseDetails={onFetchDatabaseDetails}
+                            savedQueries={connectionSavedQueries}
+                            onUseSavedQuery={onUseSavedQuery}
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })}

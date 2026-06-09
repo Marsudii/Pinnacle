@@ -21,7 +21,7 @@ export function HomePage() {
   return (
     <div className="space-y-5">
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
-        <p className="mb-3 text-2xl font-semibold text-blue-600">{'>'}_</p>
+        <img src="/logo.png" alt="Pinnacle logo" className="mb-3 h-14 w-14 rounded-xl object-contain" />
         <h2 className="text-4xl font-semibold tracking-tight text-slate-900">
           Welcome to <span className="text-blue-600">Pinnacle</span>
         </h2>

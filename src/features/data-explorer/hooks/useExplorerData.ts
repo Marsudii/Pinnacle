@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { executeSql } from '../../../services/tauriClient'
 import type { ConnectionProfile } from '../../../types/domain'
 import type { ExplorerTreeData, TreeNode, TreeSchema, TreeDatabase, TableStats, DetailStat, ConnectionStatus } from '../types'
-import { isSqlConnectionType, getConnPayload, escapeSqlIdentifier } from '../utils'
+import { isSqlConnectionType, getConnPayload, sqlString, quoteIdentifier } from '../utils'
 
 interface UseExplorerDataParams {
   expandedConnectionId: string | null
@@ -100,7 +100,7 @@ export function useExplorerData({
         } else if (conn.type === 'mysql') {
           const statsRes = await executeSql({
             connection: payload,
-            sql: `SELECT COUNT(*) as table_count FROM information_schema.tables WHERE table_schema = '${escapeSqlIdentifier(conn.database)}'`,
+            sql: `SELECT COUNT(*) as table_count FROM information_schema.tables WHERE table_schema = ${sqlString(conn.database)}`,
           })
           const tableCount = statsRes.rows[0]?.table_count ?? '0'
           setRealDbStats([
@@ -142,15 +142,15 @@ export function useExplorerData({
           for (const schemaName of schemaNames) {
             const tableRes = await executeSql({
               connection: payload,
-              sql: `SELECT tablename FROM pg_tables WHERE schemaname = '${escapeSqlIdentifier(schemaName)}' ORDER BY tablename`,
+              sql: `SELECT tablename FROM pg_tables WHERE schemaname = ${sqlString(schemaName)} ORDER BY tablename`,
             })
             const viewRes = await executeSql({
               connection: payload,
-              sql: `SELECT viewname FROM pg_views WHERE schemaname = '${escapeSqlIdentifier(schemaName)}' ORDER BY viewname`,
+              sql: `SELECT viewname FROM pg_views WHERE schemaname = ${sqlString(schemaName)} ORDER BY viewname`,
             })
             const funcRes = await executeSql({
               connection: payload,
-              sql: `SELECT routine_name FROM information_schema.routines WHERE routine_schema = '${escapeSqlIdentifier(schemaName)}' ORDER BY routine_name`,
+              sql: `SELECT routine_name FROM information_schema.routines WHERE routine_schema = ${sqlString(schemaName)} ORDER BY routine_name`,
             })
             schemas.push({
               name: schemaName,
@@ -217,10 +217,10 @@ export function useExplorerData({
       try {
         // Use the specified database or fall back to the connection's default
         const payload = { ...getConnPayload(conn), database: dbName || conn.database }
-        const schemaId = escapeSqlIdentifier(schema)
-        const tableId = escapeSqlIdentifier(table)
         const fromClause =
-          conn.type === 'postgresql' ? `"${schemaId}"."${tableId}"` : `\`${tableId}\``
+          conn.type === 'postgresql'
+            ? `${quoteIdentifier(schema, '"')}.${quoteIdentifier(table, '"')}`
+            : quoteIdentifier(table, '`')
 
         const dataRes = await executeSql({
           connection: payload,
@@ -233,8 +233,8 @@ export function useExplorerData({
           connection: payload,
           sql:
             conn.type === 'postgresql'
-              ? `SELECT column_name, data_type, is_nullable, column_default FROM information_schema.columns WHERE table_schema = '${escapeSqlIdentifier(schema)}' AND table_name = '${escapeSqlIdentifier(table)}' ORDER BY ordinal_position`
-              : `SHOW COLUMNS FROM \`${tableId}\``,
+              ? `SELECT column_name, data_type, is_nullable, column_default FROM information_schema.columns WHERE table_schema = ${sqlString(schema)} AND table_name = ${sqlString(table)} ORDER BY ordinal_position`
+              : `SHOW COLUMNS FROM ${quoteIdentifier(table, '`')}`,
         })
         setRealTableStructure(structRes.rows)
 
@@ -242,8 +242,8 @@ export function useExplorerData({
           connection: payload,
           sql:
             conn.type === 'postgresql'
-              ? `SELECT indexname FROM pg_indexes WHERE schemaname = '${escapeSqlIdentifier(schema)}' AND tablename = '${escapeSqlIdentifier(table)}' ORDER BY indexname`
-              : `SHOW INDEX FROM \`${tableId}\``,
+              ? `SELECT indexname FROM pg_indexes WHERE schemaname = ${sqlString(schema)} AND tablename = ${sqlString(table)} ORDER BY indexname`
+              : `SHOW INDEX FROM ${quoteIdentifier(table, '`')}`,
         })
         setRealTableIndexes(
           conn.type === 'postgresql'

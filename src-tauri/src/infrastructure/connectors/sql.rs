@@ -11,6 +11,11 @@ use crate::{
     domain::query::{ConnectionPayload, QueryResult},
 };
 
+/// Wrap an identifier in double-quotes, escaping any internal double-quotes.
+fn quote_identifier_pg(id: &str) -> String {
+    format!("\"{}\"", id.replace('"', "\"\""))
+}
+
 fn ensure_supported_driver(driver: &str) -> AppResult<()> {
     match driver {
         "postgresql" | "mysql" => Ok(()),
@@ -121,9 +126,12 @@ pub async fn execute_sql(payload: &ConnectionPayload, sql: &str) -> AppResult<Qu
 
             // Set search_path so unqualified table names resolve to the chosen schema
             if !payload.schema.is_empty() {
-                sqlx::query(&format!("SET search_path TO {}", payload.schema))
-                    .execute(&mut conn)
-                    .await?;
+                sqlx::query(&format!(
+                    "SET search_path TO {}",
+                    quote_identifier_pg(&payload.schema)
+                ))
+                .execute(&mut conn)
+                .await?;
             }
 
             if read {

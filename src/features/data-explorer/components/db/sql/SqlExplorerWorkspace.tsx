@@ -225,8 +225,32 @@ export function SqlExplorerWorkspace({
       )}
 
       {!hasContent && (
-        <section className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center text-sm text-slate-500">
-          Open a table from the left sidebar or create a query tab to get started.
+        <section className="flex flex-1 items-center justify-center">
+          <div className="flex flex-col items-center gap-4 text-center max-w-md px-6">
+            <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-slate-100 border border-slate-200">
+              <svg
+                className="w-7 h-7 text-slate-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={1.5}
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 0 0-1.883 2.542l.857 6a2.25 2.25 0 0 0 2.227 1.932H19.05a2.25 2.25 0 0 0 2.227-1.932l.857-6a2.25 2.25 0 0 0-1.883-2.542m-16.5 0V6A2.25 2.25 0 0 1 6 3.75h3.879a1.5 1.5 0 0 1 1.06.44l2.122 2.12a1.5 1.5 0 0 0 1.06.44H18A2.25 2.25 0 0 1 20.25 9v.776"
+                />
+              </svg>
+            </div>
+            <div className="space-y-1.5">
+              <h3 className="text-sm font-semibold text-slate-700">
+                Workspace Ready
+              </h3>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Open a table from the sidebar or create a new query tab to start exploring your data.
+              </p>
+            </div>
+          </div>
         </section>
       )}
 

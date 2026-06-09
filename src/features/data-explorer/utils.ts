@@ -39,9 +39,23 @@ export function getConnPayload(conn: ConnectionProfile, schema?: string) {
 }
 
 /**
- * Escape a SQL identifier (schema/table/column name) for use in queries
- * to prevent SQL injection. Doubles quotes inside the identifier and wraps it.
+ * Escape a SQL string value and wrap in single quotes for use in WHERE clauses.
+ * Prevents SQL injection by doubling internal single quotes.
+ *
+ * @example sqlString("O'Reilly") → "'O''Reilly'"
  */
-export function escapeSqlIdentifier(id: string): string {
-  return id.replaceAll("'", "''")
+export function sqlString(value: string): string {
+  return `'${value.replaceAll("'", "''")}'`
+}
+
+/**
+ * Escape a SQL identifier (schema/table/column name) for use in double-quoted
+ * or backtick-quoted contexts. Doubles the relevant quote character inside.
+ *
+ * @example quoteIdentifier("my table", '"') → '"my table"'
+ * @example quoteIdentifier("my`table", '`') → '`my``table`'
+ */
+export function quoteIdentifier(id: string, quote: '"' | '`'): string {
+  const escaped = id.replaceAll(quote, quote + quote)
+  return `${quote}${escaped}${quote}`
 }

@@ -8,6 +8,8 @@ pub enum AppError {
     UnsupportedDriver(String),
     #[error("database error: {0}")]
     Database(String),
+    #[error("http error: {0}")]
+    Http(String),
 }
 
 impl From<sqlx::Error> for AppError {

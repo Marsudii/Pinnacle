@@ -110,11 +110,7 @@ export function TableBrowser({
   }, [])
 
   const handleCellBlur = useCallback(
-    (rowIndex: number, column: string, e: React.FocusEvent<HTMLDivElement>) => {
-      const newValue = e.currentTarget.textContent ?? ''
-      console.log(
-        `Cell edit: row=${rowIndex}, column=${column}, value=${newValue}`,
-      )
+    (rowIndex: number) => {
       setActiveRow((prev) => (prev === rowIndex ? null : prev))
     },
     [],
@@ -280,7 +276,7 @@ export function TableBrowser({
                         spellCheck={false}
                         className="max-w-full truncate px-2 py-1 outline-none focus:bg-white focus:ring-1 focus:ring-blue-300"
                         onFocus={() => handleCellFocus(rowIndex)}
-                        onBlur={(e) => handleCellBlur(rowIndex, column, e)}
+                        onBlur={() => handleCellBlur(rowIndex)}
                         onKeyDown={handleCellKeyDown}
                         title={String(row[column] ?? '')}
                       >
