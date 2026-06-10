@@ -157,38 +157,40 @@ export function TableBrowser({
           ))}
         </div>
 
-        {/* Action buttons */}
-        <div className="flex items-center gap-0.5">
-          <button
-            type="button"
-            title="Filter & Sort"
-            className="rounded-md p-1.5 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700 hover:shadow-[inset_0_0_0_1px_theme(colors.slate.200)]"
-          >
-            <ListFilter size={13} />
-          </button>
-          <button
-            type="button"
-            title="Export Data"
-            className="rounded-md p-1.5 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700 hover:shadow-[inset_0_0_0_1px_theme(colors.slate.200)]"
-          >
-            <FileDown size={13} />
-          </button>
-          <button
-            type="button"
-            title="Import Data"
-            className="rounded-md p-1.5 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700 hover:shadow-[inset_0_0_0_1px_theme(colors.slate.200)]"
-          >
-            <FileUp size={13} />
-          </button>
-          <div className="mx-1.5 h-3.5 w-px bg-slate-200" />
-          <button
-            type="button"
-            title="Column Visibility"
-            className="rounded-md p-1.5 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700 hover:shadow-[inset_0_0_0_1px_theme(colors.slate.200)]"
-          >
-            <Settings2 size={13} />
-          </button>
-        </div>
+        {/* Action buttons — only visible on the data tab */}
+        {tableInfoTab === 'data' && (
+          <div className="flex items-center gap-0.5">
+            <button
+              type="button"
+              title="Filter & Sort"
+              className="rounded-md p-1.5 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700 hover:shadow-[inset_0_0_0_1px_theme(colors.slate.200)]"
+            >
+              <ListFilter size={13} />
+            </button>
+            <button
+              type="button"
+              title="Export Data"
+              className="rounded-md p-1.5 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700 hover:shadow-[inset_0_0_0_1px_theme(colors.slate.200)]"
+            >
+              <FileDown size={13} />
+            </button>
+            <button
+              type="button"
+              title="Import Data"
+              className="rounded-md p-1.5 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700 hover:shadow-[inset_0_0_0_1px_theme(colors.slate.200)]"
+            >
+              <FileUp size={13} />
+            </button>
+            <div className="mx-1.5 h-3.5 w-px bg-slate-200" />
+            <button
+              type="button"
+              title="Column Visibility"
+              className="rounded-md p-1.5 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-700 hover:shadow-[inset_0_0_0_1px_theme(colors.slate.200)]"
+            >
+              <Settings2 size={13} />
+            </button>
+          </div>
+        )}
       </div>
 
       {tableDataLoading && (

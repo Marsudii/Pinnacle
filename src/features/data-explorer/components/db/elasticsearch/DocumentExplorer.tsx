@@ -342,11 +342,24 @@ export function DocumentExplorer({ connection, indexName, indices }: Props) {
       {/* Create document form */}
       {showAddDoc && (
         <div className="flex flex-col gap-2 px-3 py-1.5 border-b border-slate-200 bg-slate-50">
-          <textarea
-            value={newDocJson}
-            onChange={(e) => setNewDocJson(e.target.value)}
-            className="w-full h-36 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-mono text-slate-700 focus:border-blue-400 focus:outline-none resize-y"
-          />
+          <div className="h-48 rounded-md border border-slate-200 bg-white overflow-hidden">
+            <Editor
+              language="json"
+              value={newDocJson}
+              onChange={(val) => setNewDocJson(val ?? '{\n  \n}')}
+              theme="light"
+              options={{
+                fontSize: 12,
+                minimap: { enabled: false },
+                scrollBeyondLastLine: false,
+                wordWrap: 'on',
+                automaticLayout: true,
+                lineNumbers: 'on',
+                padding: { top: 8 },
+                tabSize: 2,
+              }}
+            />
+          </div>
           <div className="flex gap-1.5">
             <button
               onClick={handleAddDocument}
