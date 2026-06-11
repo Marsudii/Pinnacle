@@ -25,9 +25,9 @@ export function AppShell() {
   }
 
   return (
-    <div className="min-h-screen transition-colors duration-300  bg-surface text-on-surface">
+    <div className="min-h-screen transition-colors duration-300 bg-surface text-on-surface">
       <div className="flex h-screen w-full flex-col bg-surface shadow-[0_24px_80px_rgba(15,23,42,0.06)]">
-        <header className="relative flex h-16 items-center border-b border-b-outline-variant bg-surface px-6 backdrop-blur-sm">
+        <header className="relative transition-colors duration-300 flex h-16 items-center border-b border-b-outline-variant bg-surface px-6 backdrop-blur-sm">
           {/* Logo & Brand */}
           <div className="flex items-center gap-3">
             <div className="group relative">

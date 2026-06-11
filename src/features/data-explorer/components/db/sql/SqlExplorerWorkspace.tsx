@@ -326,7 +326,7 @@ export function SqlExplorerWorkspace({
 
       </div>
 
-      <footer className="shrink-0 border border-slate-200 bg-gray-200 px-3 py-1.5 text-[11px] text-slate-600 backdrop-blur">
+      <footer className="shrink-0 border border-outline-variant bg-surface-variant px-3 py-1.5 text-[11px] text-on-surface-variant backdrop-blur">
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
           <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
             <span>{selectedConnection.type.toUpperCase()} · last refresh {lastRefreshedAt}</span>
@@ -347,7 +347,7 @@ export function SqlExplorerWorkspace({
                 onSelectedConnectionIdChange(id)
                 if (id) onExpandedConnectionIdChange(id)
               }}
-              className="h-7 rounded-md border-0 bg-transparent px-2 text-[11px] text-slate-700 focus:outline-none"
+              className="cursor-pointer h-7 rounded-md border-0 bg-transparent px-2 text-[11px] text-on-surface focus:outline-none"
             >
               <option value="">Recent Connections</option>
               {recentConnections.map((connection) => (
@@ -357,7 +357,7 @@ export function SqlExplorerWorkspace({
               ))}
             </select>
 
-            <span className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-[10px] font-semibold text-slate-600">
+            <span className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-[10px] font-semibold text-on-surface">
               <span className={`h-2 w-2 rounded-full ${statusStyle[selectedConnectionStatus]}`} />
               {selectedConnectionStatus}
             </span>
@@ -365,7 +365,7 @@ export function SqlExplorerWorkspace({
             <button
               type="button"
               onClick={onToggleDetailsPanel}
-              className="inline-flex h-7 items-center rounded-md px-2 text-slate-600 hover:bg-gray-300 transition-colors"
+              className="cursor-pointer inline-flex h-7 items-center rounded-md px-2 text-on-surface hover:bg-surface transition-colors"
               title={isDetailsPanelOpen ? 'Hide details panel' : 'Show details panel'}
             >
               {isDetailsPanelOpen ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />}
