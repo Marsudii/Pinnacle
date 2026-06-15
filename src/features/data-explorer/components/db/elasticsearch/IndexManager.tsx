@@ -9,6 +9,7 @@ import {
   elasticCreateIndex,
 } from '../../../../../services/tauriClient'
 import { Plus, Trash2, RefreshCw, FolderOpen, FolderClosed, Search, SlidersHorizontal } from 'lucide-react'
+import { CenteredLoadingState } from '../../shared/CenteredLoadingState'
 
 interface Props {
   connection: ConnectionPayload
@@ -288,7 +289,8 @@ export function IndexManager({ connection, indices, onRefresh, onSelectIndex }: 
       )}
 
       {/* Table */}
-      <div className="scrollbar-thin flex-1 min-h-0 overflow-auto border border-slate-200 [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded [&::-webkit-scrollbar-thumb]:bg-slate-300 [&::-webkit-scrollbar-track]:bg-slate-50">
+      <div className="relative flex-1 min-h-0 border border-slate-200">
+        <div className="scrollbar-thin h-full overflow-auto [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded [&::-webkit-scrollbar-thumb]:bg-slate-300 [&::-webkit-scrollbar-track]:bg-slate-50">
         <table
           className="w-full border-collapse text-xs"
           style={{ tableLayout: 'fixed' }}
@@ -442,6 +444,12 @@ export function IndexManager({ connection, indices, onRefresh, onSelectIndex }: 
             ))}
           </tbody>
         </table>
+        </div>
+        <CenteredLoadingState
+          loading={loading}
+          label="Applying index operation..."
+          iconSize={3}
+        />
       </div>
     </div>
   )

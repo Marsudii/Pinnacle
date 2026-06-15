@@ -1,12 +1,14 @@
+import { useState } from "react";
 import {
   Activity,
   Braces,
   ChevronRight,
   Database,
   FileText,
+  Folder,
+  FolderOpen,
   Hash,
   Layers,
-  Loader2,
   List,
   MessageSquare,
   Plus,
@@ -15,6 +17,7 @@ import {
   Terminal,
   Zap,
 } from "lucide-react";
+import { CenteredLoadingState } from "./shared/CenteredLoadingState";
 import type { ConnectionProfile, ConnectionType, ElasticIndex } from "../../../types/domain";
 import type { TreeNode, SavedQuery } from "../types";
 import { databaseTypeOptions } from "../constants";
@@ -354,6 +357,26 @@ export function ConnectionSidebar({
   elasticLoading,
   onRetryElasticIndices,
 }: ConnectionSidebarProps) {
+  // Track which groups are collapsed; default is expanded (empty set).
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
+    () => new Set(),
+  );
+
+  const isGroupCollapsed = (group: string): boolean =>
+    collapsedGroups.has(group);
+
+  const toggleGroup = (group: string): void => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(group)) {
+        next.delete(group);
+      } else {
+        next.add(group);
+      }
+      return next;
+    });
+  };
+
   return (
     <aside className="h-full overflow-x-hidden overflow-y-auto min-w-0">
       <div className="mb-2 flex items-center justify-between px-3 pt-3">
@@ -381,134 +404,176 @@ export function ConnectionSidebar({
       </label>
 
       <div className="space-y-3">
-        {Object.entries(groupedConnections).map(([group, profiles]) => (
-          <section key={group}>
-            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400 px-3">
-              {group}
-            </p>
-            <div className="space-y-1">
-              {profiles.map((item) => {
-                const active = selectedConnection?.id === item.id;
-                const logo = databaseTypeOptions.find(
-                  (option) => option.value === item.type,
-                )?.logoSrc;
-                const isLoading = treeLoading[item.id] || !!elasticLoading?.[item.id];
-                const connectionSavedQueries = savedQueries[item.id] ?? [];
+        {Object.entries(groupedConnections).map(([group, profiles]) => {
+          const collapsed = isGroupCollapsed(group);
+          return (
+            <section key={group}>
+              <button
+                type="button"
+                onClick={() => toggleGroup(group)}
+                aria-expanded={!collapsed}
+                aria-controls={`group-${group}-content`}
+                className="mb-1.5 flex w-full items-center gap-1.5 px-3 text-left transition-colors text-[11px] font-semibold uppercase tracking-wide text-slate-400 hover:text-slate-500"
+              >
+                <ChevronRight
+                  size={11}
+                  className={[
+                    "shrink-0 text-slate-400 transition-transform duration-200",
+                    collapsed ? "" : "rotate-90",
+                  ].join(" ")}
+                />
+                {collapsed ? (
+                  <Folder
+                    size={11}
+                    className="shrink-0 text-slate-500"
+                  />
+                ) : (
+                  <FolderOpen
+                    size={11}
+                    className="shrink-0 text-slate-400"
+                  />
+                )}
+                <span className="min-w-0 flex-1 truncate">{group}</span>
+              </button>
+              <div
+                id={`group-${group}-content`}
+                className={[
+                  "overflow-hidden transition-all duration-200 ease-in-out",
+                  collapsed
+                    ? "max-h-0 opacity-0"
+                    : "max-h-500 opacity-100",
+                ].join(" ")}
+                aria-hidden={collapsed}
+              >
+                <div className="space-y-1 ml-2">
+                  {profiles.map((item) => {
+                    const active = selectedConnection?.id === item.id;
+                    const logo = databaseTypeOptions.find(
+                      (option) => option.value === item.type,
+                    )?.logoSrc;
+                    const isLoading = treeLoading[item.id] || !!elasticLoading?.[item.id];
+                    const connectionSavedQueries = savedQueries[item.id] ?? [];
 
-                // Get tree nodes based on connection type
-                const sqlTreeNodes = isSqlConnectionType(item.type)
-                  ? getTreeNodesForConnection(item)
-                  : [];
-                const connectionIndices = elasticIndices?.[item.id];
-                const staticTreeNodes = isSqlConnectionType(item.type)
-                  ? []
-                  : getStaticTreeNodes(item.type, connectionIndices);
-                const treeNodes =
-                  sqlTreeNodes.length > 0 ? sqlTreeNodes : staticTreeNodes;
+                    // Get tree nodes based on connection type
+                    const sqlTreeNodes = isSqlConnectionType(item.type)
+                      ? getTreeNodesForConnection(item)
+                      : [];
+                    const connectionIndices = elasticIndices?.[item.id];
+                    const staticTreeNodes = isSqlConnectionType(item.type)
+                      ? []
+                      : getStaticTreeNodes(item.type, connectionIndices);
+                    const treeNodes =
+                      sqlTreeNodes.length > 0 ? sqlTreeNodes : staticTreeNodes;
 
-                return (
-                  <div key={item.id}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onSelectConnection(item.id);
-                        onToggleExpand(item.id);
-                      }}
-                      onContextMenu={(event) => {
-                        event.preventDefault();
-                        onContextMenu(event, item.id);
-                      }}
-                      className={[
-                        "w-full px-3 py-2 text-left transition hover:bg-slate-100 overflow-hidden",
-                        active ? "bg-blue-100" : "",
-                      ].join(" ")}
-                    >
-                      <span className="flex items-center gap-2">
-                        <span className="grid h-5 w-5 shrink-0 place-items-center rounded bg-white">
-                          {logo ? (
-                            <img
-                              src={logo}
-                              alt={item.type}
-                              className="h-3 w-3 object-contain"
-                            />
-                          ) : (
-                            <Database size={14} />
-                          )}
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span
-                            className={[
-                              "block truncate text-xs font-medium",
-                              active ? "text-blue-800" : "text-slate-800",
-                            ].join(" ")}
-                          >
-                            {item.name}
-                          </span>
-                        </span>
-                        {isLoading ? (
-                          <Loader2
-                            size={14}
-                            className="shrink-0 animate-spin text-blue-500"
-                          />
-                        ) : (
-                          <ChevronRight
-                            size={14}
-                            className={[
-                              "shrink-0 text-slate-400 transition-transform",
-                              expandedConnectionId === item.id
-                                ? "rotate-90"
-                                : "",
-                            ].join(" ")}
-                          />
-                        )}
-                      </span>
-                    </button>
-                    {expandedConnectionId === item.id && (
-                      <div className="border-l-2 border-blue-200">
-                        {elasticIndicesError?.[item.id] && (
-                          <div className="mx-2 my-1 rounded border border-red-200 bg-red-50 px-2 py-1.5">
-                            <p className="text-[11px] text-red-600 font-medium">Failed to load indices</p>
-                            <p className="text-[10px] text-red-400 truncate mt-0.5">{elasticIndicesError[item.id]}</p>
-                            {onRetryElasticIndices && (
-                              <button
-                                type="button"
-                                onClick={() => onRetryElasticIndices(item.id)}
-                                className="mt-1 text-[10px] font-medium text-blue-600 hover:text-blue-700 hover:underline"
+                    return (
+                      <div key={item.id}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onSelectConnection(item.id);
+                            onToggleExpand(item.id);
+                          }}
+                          onContextMenu={(event) => {
+                            event.preventDefault();
+                            onContextMenu(event, item.id);
+                          }}
+                          className={[
+                            "w-full px-3 py-2 text-left transition hover:bg-slate-100 overflow-hidden",
+                            active ? "bg-blue-100" : "",
+                          ].join(" ")}
+                        >
+                          <span className="flex items-center gap-2">
+                            <span className="grid h-5 w-5 shrink-0 place-items-center rounded bg-white">
+                              {logo ? (
+                                <img
+                                  src={logo}
+                                  alt={item.type}
+                                  className="h-3 w-3 object-contain"
+                                />
+                              ) : (
+                                <Database size={14} />
+                              )}
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span
+                                className={[
+                                  "block truncate text-xs font-medium",
+                                  active ? "text-blue-800" : "text-slate-800",
+                                ].join(" ")}
                               >
-                                Retry
-                              </button>
+                                {item.name}
+                              </span>
+                            </span>
+                            {isLoading ? (
+                              <span className="shrink-0">
+                                <CenteredLoadingState
+                                  loading={true}
+                                  label=""
+                                  iconSize={3}
+                                  showElapsed={false}
+                                />
+                              </span>
+                            ) : (
+                              <ChevronRight
+                                size={14}
+                                className={[
+                                  "shrink-0 text-slate-400 transition-transform",
+                                  expandedConnectionId === item.id
+                                    ? "rotate-90"
+                                    : "",
+                                ].join(" ")}
+                              />
                             )}
+                          </span>
+                        </button>
+                        {expandedConnectionId === item.id && (
+                          <div className="border-l-2 border-blue-200">
+                            {elasticIndicesError?.[item.id] && (
+                              <div className="mx-2 my-1 rounded border border-red-200 bg-red-50 px-2 py-1.5">
+                                <p className="text-[11px] text-red-600 font-medium">Failed to load indices</p>
+                                <p className="text-[10px] text-red-400 truncate mt-0.5">{elasticIndicesError[item.id]}</p>
+                                {onRetryElasticIndices && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onRetryElasticIndices(item.id)}
+                                    className="mt-1 text-[10px] font-medium text-blue-600 hover:text-blue-700 hover:underline"
+                                  >
+                                    Retry
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                            {treeNodes.length === 0 && !treeLoading[item.id] && !elasticIndicesError?.[item.id] && (
+                              <p className="px-2 py-1 text-[11px] text-slate-400 italic">
+                                No metadata available
+                              </p>
+                            )}
+                            {treeNodes.map((node) => (
+                              <TreeNodeItem
+                                key={node.label}
+                                node={node}
+                                depth={0}
+                                parentPath=""
+                                selectedTreeNode={selectedTreeNode}
+                                expandedTreePaths={expandedTreePaths}
+                                onTreeNodeClick={onTreeNodeClick}
+                                onSelectedTreeNode={onSelectedTreeNode}
+                                onToggleTreeNode={onToggleTreeNode}
+                                onFetchDatabaseDetails={onFetchDatabaseDetails}
+                                savedQueries={connectionSavedQueries}
+                                onUseSavedQuery={onUseSavedQuery}
+                              />
+                            ))}
                           </div>
                         )}
-                        {treeNodes.length === 0 && !treeLoading[item.id] && !elasticIndicesError?.[item.id] && (
-                          <p className="px-2 py-1 text-[11px] text-slate-400 italic">
-                            No metadata available
-                          </p>
-                        )}
-                        {treeNodes.map((node) => (
-                          <TreeNodeItem
-                            key={node.label}
-                            node={node}
-                            depth={0}
-                            parentPath=""
-                            selectedTreeNode={selectedTreeNode}
-                            expandedTreePaths={expandedTreePaths}
-                            onTreeNodeClick={onTreeNodeClick}
-                            onSelectedTreeNode={onSelectedTreeNode}
-                            onToggleTreeNode={onToggleTreeNode}
-                            onFetchDatabaseDetails={onFetchDatabaseDetails}
-                            savedQueries={connectionSavedQueries}
-                            onUseSavedQuery={onUseSavedQuery}
-                          />
-                        ))}
                       </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        ))}
+                    );
+                  })}
+                </div>
+              </div>
+            </section>
+          );
+        })}
       </div>
     </aside>
   );

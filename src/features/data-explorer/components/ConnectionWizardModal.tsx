@@ -1,5 +1,5 @@
-import { AlertTriangle, Check, ChevronLeft, ChevronRight, Database, Loader2, Plug, X } from 'lucide-react'
-import { useState, useMemo } from 'react'
+import { AlertTriangle, Check, ChevronDown, ChevronLeft, ChevronRight, Database, Loader2, Plug, Plus, X } from 'lucide-react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { testConnection, elasticTestConnection } from '../../../services/tauriClient'
 import type { ConnectionProfile, ConnectionType } from '../../../types/domain'
 import type { WizardStep, TestConnectionResult } from '../types'
@@ -16,6 +16,7 @@ interface FieldError {
 interface ConnectionWizardModalProps {
   editingId: string | null
   existingProfile: ConnectionProfile | null
+  existingGroups: string[]
   onSave: (profile: ConnectionProfile) => void
   onClose: () => void
 }
@@ -23,6 +24,7 @@ interface ConnectionWizardModalProps {
 export function ConnectionWizardModal({
   editingId,
   existingProfile,
+  existingGroups,
   onSave,
   onClose,
 }: ConnectionWizardModalProps) {
@@ -37,11 +39,40 @@ export function ConnectionWizardModal({
   const [newUser, setNewUser] = useState(existingProfile?.username ?? '')
   const [newPassword, setNewPassword] = useState(existingProfile?.password ?? '')
   const [newSsl, setNewSsl] = useState(existingProfile?.ssl ?? false)
-  const [newTags, setNewTags] = useState(existingProfile?.tags.join(', ') ?? 'Development')
+  const [newGroup, setNewGroup] = useState(existingProfile?.tags[0] ?? '')
+  const [groupDropdownOpen, setGroupDropdownOpen] = useState(false)
+  const groupInputRef = useRef<HTMLInputElement>(null)
+  const groupDropdownRef = useRef<HTMLDivElement>(null)
   const [isTestingConnection, setIsTestingConnection] = useState(false)
   const [testConnectionResult, setTestConnectionResult] = useState<TestConnectionResult | null>(null)
   const [skipTest, setSkipTest] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<FieldError>({})
+
+  // Close group dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        groupDropdownRef.current &&
+        !groupDropdownRef.current.contains(e.target as Node) &&
+        groupInputRef.current &&
+        !groupInputRef.current.contains(e.target as Node)
+      ) {
+        setGroupDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  // Filtered groups for the dropdown (unique, non-empty, matching input)
+  const filteredGroups = useMemo(() => {
+    const query = newGroup.trim().toLowerCase()
+    const unique = [...new Set(existingGroups.filter(Boolean))]
+    if (!query) return unique
+    return unique.filter((g) => g.toLowerCase().includes(query))
+  }, [existingGroups, newGroup])
+
+  const isNewGroupValue = newGroup.trim() !== '' && !existingGroups.includes(newGroup.trim())
 
   // Inline validation for step 2 fields
   const validateFields = useMemo(() => {
@@ -82,7 +113,8 @@ export function ConnectionWizardModal({
     setNewUser('')
     setNewPassword('')
     setNewSsl(false)
-    setNewTags('Development')
+    setNewGroup('')
+    setGroupDropdownOpen(false)
     setIsTestingConnection(false)
     setTestConnectionResult(null)
     setSkipTest(false)
@@ -171,10 +203,7 @@ export function ConnectionWizardModal({
     const now = new Date().toISOString()
     const parsedPort = Number(newPort)
     const savedId = editingId ?? crypto.randomUUID()
-    const tags = newTags
-      .split(',')
-      .map((item) => item.trim())
-      .filter(Boolean)
+    const group = newGroup.trim()
 
     onSave({
       id: savedId,
@@ -190,7 +219,7 @@ export function ConnectionWizardModal({
         newPassword.length > 0
           ? 'stronghold://pending'
           : (existingProfile?.encryptedPasswordRef ?? 'stronghold://empty'),
-      tags: tags.length > 0 ? tags : ['Ungrouped'],
+      tags: group ? [group] : ['Ungrouped'],
       favorite: existingProfile?.favorite ?? false,
       createdAt: existingProfile?.createdAt ?? now,
       updatedAt: now,
@@ -395,14 +424,74 @@ export function ConnectionWizardModal({
                 />
               </div>
 
-              {/* Tags & SSL */}
+              {/* Group & SSL */}
               <div className="flex items-center gap-3">
-                <input
-                  value={newTags}
-                  onChange={(e) => setNewTags(e.target.value)}
-                  placeholder="Group"
-                  className={`${inputClasses} flex-1`}
-                />
+                <div className="relative flex-1" ref={groupDropdownRef}>
+                  <input
+                    ref={groupInputRef}
+                    value={newGroup}
+                    onChange={(e) => {
+                      setNewGroup(e.target.value)
+                      setGroupDropdownOpen(true)
+                    }}
+                    onFocus={() => setGroupDropdownOpen(true)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        setGroupDropdownOpen(false)
+                      }
+                    }}
+                    placeholder="Group"
+                    className={`${inputClasses} pr-8`}
+                    autoComplete="off"
+                  />
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onClick={() => {
+                      setGroupDropdownOpen((prev) => !prev)
+                      if (!groupDropdownOpen) groupInputRef.current?.focus()
+                    }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    <ChevronDown size={14} className={`transition-transform ${groupDropdownOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                  {groupDropdownOpen && (filteredGroups.length > 0 || isNewGroupValue) && (
+                    <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-40 overflow-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+                      {filteredGroups.map((group) => (
+                        <button
+                          key={group}
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault()
+                            setNewGroup(group)
+                            setGroupDropdownOpen(false)
+                          }}
+                          className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition hover:bg-blue-50 ${
+                            group === newGroup ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-700'
+                          }`}
+                        >
+                          <span className="truncate">{group}</span>
+                          {group === newGroup && (
+                            <Check size={12} className="ml-auto shrink-0 text-blue-600" />
+                          )}
+                        </button>
+                      ))}
+                      {isNewGroupValue && (
+                        <button
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault()
+                            setGroupDropdownOpen(false)
+                          }}
+                          className="flex w-full items-center gap-2 border-t border-slate-100 px-3 py-1.5 text-left text-sm text-blue-600 transition hover:bg-blue-50"
+                        >
+                          <Plus size={12} className="shrink-0" />
+                          <span className="truncate">Create "{newGroup.trim()}"</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
                 <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm text-slate-600">
                   <span
                     className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${

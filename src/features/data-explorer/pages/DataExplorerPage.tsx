@@ -10,6 +10,7 @@ import { ConnectionWizardModal } from '../components/ConnectionWizardModal'
 import { ContextMenu } from '../components/ContextMenu'
 import { executeSql } from '../../../services/tauriClient'
 import { getConnPayload, isSqlConnectionType, quoteIdentifier } from '../utils'
+import { useMemo } from 'react'
 
 export function DataExplorerPage() {
   const {
@@ -97,6 +98,12 @@ export function DataExplorerPage() {
     handleDeleteConnection,
     handleCloseAddModal,
   } = useDataExplorerOrchestrator()
+
+  // Derive unique existing groups from all connection profiles
+  const existingGroups = useMemo(
+    () => [...new Set(items.map((p) => p.tags[0]).filter(Boolean))].sort(),
+    [items],
+  )
 
   const getSqlTableListContext = () => {
     if (!selectedConnection || !isSqlConnectionType(selectedConnection.type)) {
@@ -439,6 +446,7 @@ export function DataExplorerPage() {
         <ConnectionWizardModal
           editingId={editingId}
           existingProfile={editingId ? items.find((p) => p.id === editingId) ?? null : null}
+          existingGroups={existingGroups}
           onSave={handleSaveConnection}
           onClose={handleCloseAddModal}
         />

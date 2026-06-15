@@ -94,6 +94,10 @@ export function CenteredLoadingState({
       ? 'flex h-full items-center justify-center bg-white text-slate-400'
       : 'flex h-full items-center justify-center text-slate-400'
 
+  const contentClass = showElapsed || label
+    ? 'flex items-center'
+    : 'flex items-center justify-center'
+
   const elapsedFloor = Math.floor(elapsedMs)
   const ariaLabel = showElapsed
     ? `${label} (${elapsedFloor} milliseconds elapsed)`
@@ -101,19 +105,21 @@ export function CenteredLoadingState({
 
   return (
     <div role="status" aria-live="polite" aria-label={ariaLabel} className={wrapperClass}>
-      <RefreshCw
-        className={`${ICON_CLASS[iconSize]} animate-spin mr-2 shrink-0`}
-        aria-hidden="true"
-      />
-      <span className="text-xs">{label}</span>
-      {showElapsed && (
-        <span
-          className="ml-2 text-xs text-slate-400 tabular-nums"
-          data-testid="loading-elapsed"
-        >
-          {elapsedFloor} ms
-        </span>
-      )}
+      <div className={contentClass}>
+        <RefreshCw
+          className={`${ICON_CLASS[iconSize]} animate-spin shrink-0${showElapsed || label ? ' mr-2' : ''}`}
+          aria-hidden="true"
+        />
+        {label && <span className="text-xs">{label}</span>}
+        {showElapsed && (
+          <span
+            className="ml-2 text-xs text-slate-400 tabular-nums"
+            data-testid="loading-elapsed"
+          >
+            {elapsedFloor} ms
+          </span>
+        )}
+      </div>
     </div>
   )
 }

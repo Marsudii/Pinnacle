@@ -4,6 +4,7 @@ import { elasticExecuteQuery } from '../../../../../services/tauriClient'
 import type { ElasticQueryResult } from '../../../../../types/domain'
 import { Play, Clock, Copy, ChevronDown } from 'lucide-react'
 import Editor from '@monaco-editor/react'
+import { CenteredLoadingState } from '../../shared/CenteredLoadingState'
 
 interface QueryHistoryEntry {
   id: string
@@ -210,11 +211,7 @@ export function QueryConsole({ connection }: Props) {
           disabled={loading}
           className="flex items-center gap-1.5 rounded bg-emerald-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
         >
-          {loading ? (
-            <span className="animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full" />
-          ) : (
-            <Play className="h-3.5 w-3.5" />
-          )} Run
+          <Play className="h-3.5 w-3.5" /> Run
         </button>
       </div>
 
@@ -273,6 +270,7 @@ export function QueryConsole({ connection }: Props) {
           </div>
         </div>
         <div className="flex-1 overflow-auto">
+          <CenteredLoadingState loading={loading} label="Executing query..." iconSize={3} />
           {error && (
             <pre className="px-4 py-3 text-sm font-mono text-red-600 whitespace-pre-wrap break-all">
               {error}

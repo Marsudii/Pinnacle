@@ -169,10 +169,15 @@ export function useDataExplorerOrchestrator(): DataExplorerOrchestratorResult {
       ssl: conn.ssl ?? false,
     }
 
-    setElasticLoading((prev) => ({ ...prev, [conn.id]: true }))
+    let cancelled = false
 
-    elasticListIndices(payload)
-      .then((indices) => {
+    const loadElasticIndices = async () => {
+      setElasticLoading((prev) => ({ ...prev, [conn.id]: true }))
+
+      try {
+        const indices = await elasticListIndices(payload)
+        if (cancelled) return
+
         setElasticIndicesError((prev) => {
           const next = { ...prev }
           delete next[conn.id]
@@ -182,20 +187,28 @@ export function useDataExplorerOrchestrator(): DataExplorerOrchestratorResult {
           ...prev,
           [conn.id]: indices ?? [],
         }))
-      })
-      .catch((err) => {
+      } catch (err) {
+        if (cancelled) return
         setElasticIndicesError((prev) => ({
           ...prev,
           [conn.id]: err instanceof Error ? err.message : String(err),
         }))
-      })
-      .finally(() => {
-        setElasticLoading((prev) => {
-          const next = { ...prev }
-          delete next[conn.id]
-          return next
-        })
-      })
+      } finally {
+        if (!cancelled) {
+          setElasticLoading((prev) => {
+            const next = { ...prev }
+            delete next[conn.id]
+            return next
+          })
+        }
+      }
+    }
+
+    void loadElasticIndices()
+
+    return () => {
+      cancelled = true
+    }
   }, [expandedConnectionId, items])
 
   // ── Elasticsearch indices retry handler ───────────────────────────
