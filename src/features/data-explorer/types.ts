@@ -85,4 +85,14 @@ export interface ContextMenuState {
   x: number
   y: number
   itemId: string
+  tableName?: string
+}
+
+export interface DeleteTableTarget {
+  connectionId: string
+  connectionName: string
+  connectionType: string
+  database: string
+  schema: string
+  tableName: string
 }

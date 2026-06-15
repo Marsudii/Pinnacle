@@ -131,3 +131,28 @@ export interface IndexDefinition {
   isUnique: boolean
   indexType: string
 }
+
+// ── Drop Table Types ─────────────────────────────────────────────
+
+export interface DropTablePayload {
+  connection: {
+    type: string
+    host: string
+    port: number
+    username: string
+    password: string
+    database: string
+    ssl: boolean
+    schema?: string
+  }
+  schema: string
+  tableName: string
+  cascade: boolean
+}
+
+export interface DropTableResult {
+  success: boolean
+  sql: string
+  elapsedMs: number
+  error: string | null
+}

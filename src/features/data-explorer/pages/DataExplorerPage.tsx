@@ -8,6 +8,7 @@ import { ElasticExplorerWorkspace } from '../components/db/elasticsearch/Elastic
 import { MongodbWorkspaceNotice } from '../components/db/mongodb/MongodbWorkspaceNotice'
 import { ConnectionWizardModal } from '../components/ConnectionWizardModal'
 import { ContextMenu } from '../components/ContextMenu'
+import { DeleteTableModal } from '../components/DeleteTableModal'
 import { TableDesignerModal } from '../components/table-designer/TableDesignerModal'
 import { useDesignerStore } from '../../../state/designerStore'
 import { executeSql } from '../../../services/tauriClient'
@@ -99,6 +100,11 @@ export function DataExplorerPage() {
 
     handleDeleteConnection,
     handleCloseAddModal,
+
+    deleteTableTarget,
+    handleRequestDeleteTable,
+    handleRequestDeleteTableFromMenu,
+    handleCloseDeleteTableModal,
   } = useDataExplorerOrchestrator()
 
   // Derive unique existing groups from all connection profiles
@@ -109,6 +115,7 @@ export function DataExplorerPage() {
 
   // Designer store
   const loadAndOpenForEdit = useDesignerStore((s) => s.loadAndOpenForEdit)
+  const openForCreate = useDesignerStore((s) => s.openForCreate)
 
   const handleOpenDesignerForEdit = async (tableName: string) => {
     if (!selectedConnection || !isSqlConnectionType(selectedConnection.type)) return
@@ -119,6 +126,25 @@ export function DataExplorerPage() {
         : databaseName ?? ''
     const payload = { ...getConnPayload(selectedConnection), database: databaseName ?? '' }
     await loadAndOpenForEdit(payload, tableName, databaseName ?? '', schemaName)
+  }
+
+  const handleCreateInDesigner = () => {
+    if (!selectedConnection || !isSqlConnectionType(selectedConnection.type)) return
+    const databaseName = queryExecution.queryDatabase || explorerData.selectedDatabase || selectedConnection.database
+    const schemaName =
+      selectedConnection.type === 'postgresql'
+        ? queryExecution.querySchema || explorerData.selectedSchema || 'public'
+        : databaseName ?? ''
+    if (!databaseName) return
+    const payload = { ...getConnPayload(selectedConnection), database: databaseName }
+
+    const handleAfterSave = async (createdTableName: string) => {
+      await refreshSqlTableListAfterDdl()
+      // Select the newly created table in the explorer
+      wrappedHandleTreeNodeClick(createdTableName, databaseName)
+    }
+
+    openForCreate(schemaName, databaseName, payload, handleAfterSave)
   }
 
   const getSqlTableListContext = () => {
@@ -237,6 +263,9 @@ export function DataExplorerPage() {
               onToggleTreeNode={handleToggleTreeNode}
               onFetchDatabaseDetails={handleFetchDatabaseDetails}
               onUseSavedQuery={queryExecution.applySavedQueryToActiveTab}
+              onTableNodeContextMenu={(event, connectionId, tableName) => {
+                setContextMenu({ x: event.clientX, y: event.clientY, itemId: connectionId, tableName })
+              }}
               elasticIndices={elasticIndices}
               elasticIndicesError={elasticIndicesError}
               elasticLoading={elasticLoading}
@@ -268,6 +297,9 @@ export function DataExplorerPage() {
               onToggleTreeNode={handleToggleTreeNode}
               onFetchDatabaseDetails={handleFetchDatabaseDetails}
               onUseSavedQuery={queryExecution.applySavedQueryToActiveTab}
+              onTableNodeContextMenu={(event, connectionId, tableName) => {
+                setContextMenu({ x: event.clientX, y: event.clientY, itemId: connectionId, tableName })
+              }}
               elasticIndices={elasticIndices}
               elasticIndicesError={elasticIndicesError}
               elasticLoading={elasticLoading}
@@ -373,7 +405,9 @@ export function DataExplorerPage() {
                     onCreateTable={handleCreateTable}
                     onEditTable={handleEditTable}
                     onDeleteTable={handleDeleteTable}
+                    onRequestDeleteTable={handleRequestDeleteTable}
                     onOpenDesigner={handleOpenDesignerForEdit}
+                    onCreateInDesigner={handleCreateInDesigner}
                     onUpdateActiveQuery={queryExecution.updateActiveQuery}
                     onSaveQuery={queryExecution.saveActiveQuery}
                     onUseSavedQuery={queryExecution.applySavedQueryToActiveTab}
@@ -454,6 +488,10 @@ export function DataExplorerPage() {
             onDuplicate={handleDuplicateConnection}
             onExport={handleExportConnection}
             onDelete={handleDeleteConnection}
+            onDesignTable={handleOpenDesignerForEdit}
+            onDeleteTable={(connectionId, tableName) => {
+              handleRequestDeleteTableFromMenu(connectionId, tableName)
+            }}
             onClose={() => setContextMenu(null)}
           />
         </div>
@@ -471,6 +509,35 @@ export function DataExplorerPage() {
 
       {/* Table Designer Modal */}
       <TableDesignerModal />
+
+      {/* Delete Table Confirmation Modal */}
+      {deleteTableTarget && (
+        <DeleteTableModal
+          target={deleteTableTarget}
+          onDelete={async (tableName, cascade) => {
+            const { connection, databaseName, schemaName } = getSqlTableListContext()
+            const payload = { ...getConnPayload(connection), database: databaseName }
+
+            const sql =
+              connection.type === 'postgresql'
+                ? `DROP TABLE IF EXISTS ${quoteIdentifier(schemaName, '"')}.${quoteIdentifier(tableName, '"')}${cascade ? ' CASCADE' : ''}`
+                : `DROP TABLE IF EXISTS ${quoteIdentifier(tableName, '`')}${cascade ? ' CASCADE' : ''}`
+
+            await executeSql({
+              connection: payload,
+              sql,
+            })
+
+            await refreshSqlTableListAfterDdl()
+
+            // Clear selected table state if the deleted table was selected
+            if (explorerData.selectedTable === tableName) {
+              explorerData.setSelectedTable(null)
+            }
+          }}
+          onClose={handleCloseDeleteTableModal}
+        />
+      )}
     </div>
   )
 }

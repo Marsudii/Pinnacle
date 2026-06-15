@@ -47,6 +47,7 @@ interface ConnectionSidebarProps {
   onToggleTreeNode: (path: string) => void;
   onFetchDatabaseDetails?: (dbName: string) => void;
   onUseSavedQuery?: (sql: string) => void;
+  onTableNodeContextMenu?: (event: React.MouseEvent, connectionId: string, tableName: string) => void;
   /** Elasticsearch indices per connection id */
   elasticIndices?: Record<string, ElasticIndex[]>;
   /** Elasticsearch indices fetch errors per connection id */
@@ -163,6 +164,7 @@ function TreeNodeItem({
   onFetchDatabaseDetails,
   savedQueries,
   onUseSavedQuery,
+  onTableNodeContextMenu,
 }: {
   node: TreeNode;
   depth: number;
@@ -179,6 +181,7 @@ function TreeNodeItem({
   onFetchDatabaseDetails?: (dbName: string) => void;
   savedQueries?: SavedQuery[];
   onUseSavedQuery?: (sql: string) => void;
+  onTableNodeContextMenu?: (event: React.MouseEvent, connectionId: string, tableName: string) => void;
 }) {
   const nodePath = parentPath ? `${parentPath}/${node.label}` : node.label;
   const hasChildren = node.children !== undefined;
@@ -235,6 +238,15 @@ function TreeNodeItem({
         onClick={(e) => {
           e.stopPropagation();
           handleClick();
+        }}
+        onContextMenu={(e) => {
+          if (isTableItem && onTableNodeContextMenu) {
+            e.preventDefault()
+            e.stopPropagation()
+            // Derive connectionId from the top-level parent path (database node is the connection)
+            const connectionId = parentPath.split("/")[0]
+            onTableNodeContextMenu(e, connectionId, node.label)
+          }
         }}
         className={[
           "flex w-full items-center gap-1 px-2 py-1 text-[11px] font-medium hover:bg-slate-100 overflow-hidden",
@@ -325,6 +337,7 @@ function TreeNodeItem({
               onFetchDatabaseDetails={onFetchDatabaseDetails}
               savedQueries={savedQueries}
               onUseSavedQuery={onUseSavedQuery}
+              onTableNodeContextMenu={onTableNodeContextMenu}
             />
           ))
         ))}
@@ -352,6 +365,7 @@ export function ConnectionSidebar({
   onToggleTreeNode,
   onFetchDatabaseDetails,
   onUseSavedQuery,
+  onTableNodeContextMenu,
   elasticIndices,
   elasticIndicesError,
   elasticLoading,
@@ -562,6 +576,7 @@ export function ConnectionSidebar({
                                 onFetchDatabaseDetails={onFetchDatabaseDetails}
                                 savedQueries={connectionSavedQueries}
                                 onUseSavedQuery={onUseSavedQuery}
+                                onTableNodeContextMenu={onTableNodeContextMenu}
                               />
                             ))}
                           </div>

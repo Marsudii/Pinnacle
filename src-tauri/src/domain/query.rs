@@ -133,3 +133,23 @@ pub struct DdlStatementResult {
     pub error: Option<String>,
     pub elapsed_ms: u128,
 }
+
+// ── Drop Table Types ───────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DropTablePayload {
+    pub connection: ConnectionPayload,
+    pub schema: String,
+    pub table_name: String,
+    pub cascade: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DropTableResult {
+    pub success: bool,
+    pub sql: String,
+    pub elapsed_ms: u128,
+    pub error: Option<String>,
+}

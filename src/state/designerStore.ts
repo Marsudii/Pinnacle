@@ -64,8 +64,11 @@ interface DesignerState {
   connectionSchema: string
   connectionPayload: ConnectionPayload | null
 
+  // Post-save callback — invoked after successful DDL execution with the table name
+  onAfterSave: ((tableName: string) => void | Promise<void>) | null
+
   // Actions
-  openForCreate: (schema: string, database: string) => void
+  openForCreate: (schema: string, database: string, connectionPayload?: ConnectionPayload, onAfterSave?: (tableName: string) => void | Promise<void>) => void
   openForEdit: (model: TableSchemaModel, database: string) => void
   loadAndOpenForEdit: (payload: ConnectionPayload, tableName: string, database: string, schema: string) => Promise<void>
   close: () => void
@@ -126,6 +129,7 @@ const initialState = {
   database: '',
   connectionSchema: '',
   connectionPayload: null as ConnectionPayload | null,
+  onAfterSave: null as ((tableName: string) => void | Promise<void>) | null,
 }
 
 // ── Store ──────────────────────────────────────────────────────────
@@ -135,7 +139,7 @@ export const useDesignerStore = create<DesignerState>()((set, get) => ({
 
   // ── Lifecycle ──────────────────────────────────────────────────
 
-  openForCreate: (schema: string, database: string) => {
+  openForCreate: (schema: string, database: string, connectionPayload?: ConnectionPayload, onAfterSave?: (tableName: string) => void | Promise<void>) => {
     set({
       isOpen: true,
       isCreating: true,
@@ -152,6 +156,8 @@ export const useDesignerStore = create<DesignerState>()((set, get) => ({
       errors: [],
       database,
       connectionSchema: schema,
+      connectionPayload: connectionPayload ?? null,
+      onAfterSave: onAfterSave ?? null,
     })
   },
 
@@ -219,7 +225,7 @@ export const useDesignerStore = create<DesignerState>()((set, get) => ({
   },
 
   close: () => {
-    set({ ...initialState, connectionPayload: null })
+    set({ ...initialState, connectionPayload: null, onAfterSave: null })
   },
 
   setActiveTab: (tab: DesignerTab) => set({ activeTab: tab }),
@@ -516,12 +522,23 @@ export const useDesignerStore = create<DesignerState>()((set, get) => ({
         set({ executionResult: result })
         // Auto-refresh schema after successful execution
         if (result.success) {
-          const { pendingModel } = get()
+          const { pendingModel, onAfterSave } = get()
           if (pendingModel) {
             set({
               originalModel: structuredClone(pendingModel),
               isDirty: false,
             })
+          }
+          // Trigger post-save callback (e.g. refresh explorer, select new table)
+          if (onAfterSave) {
+            const tableName = pendingModel?.tableName
+            if (tableName) {
+              try {
+                await onAfterSave(tableName)
+              } catch {
+                // Swallow callback errors — DDL already succeeded
+              }
+            }
           }
         }
       } else {

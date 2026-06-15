@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useConnectionStore } from '../../../state/connectionStore'
 import type { ConnectionProfile, ElasticIndex } from '../../../types/domain'
-import type { ConnectionStatus, ContextMenuState, DetailStat } from '../types'
+import type { ConnectionStatus, ContextMenuState, DeleteTableTarget, DetailStat } from '../types'
 import type { ElasticPanel, ElasticIndexTab } from '../components/db/elasticsearch/ElasticExplorerWorkspace'
 import { downloadTextFile } from '../utils'
 import { useExplorerData } from './useExplorerData'
@@ -93,6 +93,10 @@ export interface DataExplorerOrchestratorResult {
   handleRetryElasticIndices: (connectionId: string) => void
   handleDeleteConnection: (itemId: string) => void
   handleCloseAddModal: () => void
+  deleteTableTarget: DeleteTableTarget | null
+  handleRequestDeleteTable: (tableName: string) => void
+  handleRequestDeleteTableFromMenu: (connectionId: string, tableName: string) => void
+  handleCloseDeleteTableModal: () => void
   setExpandedConnectionId: (id: string | null) => void
   setContextMenu: (state: ContextMenuState | null) => void
   setSelectedTreeNode: (node: string | null) => void
@@ -141,6 +145,7 @@ export function useDataExplorerOrchestrator(): DataExplorerOrchestratorResult {
   const [activeElasticTabId, setActiveElasticTabId] = useState<string | null>(null)
   const [sidebarWidth, setSidebarWidth] = useState(280)
   const [isResizing, setIsResizing] = useState(false)
+  const [deleteTableTarget, setDeleteTableTarget] = useState<DeleteTableTarget | null>(null)
 
   // ── Derived state (via domain services) ──────────────────────────
 
@@ -702,6 +707,40 @@ export function useDataExplorerOrchestrator(): DataExplorerOrchestratorResult {
     handleCloseAddModal: () => {
       setEditingId(null)
       setIsAddModalOpen(false)
+    },
+    deleteTableTarget,
+    handleRequestDeleteTable: (tableName: string) => {
+      if (!selectedConnection) return
+      const databaseName = queryExecution.queryDatabase || explorerData.selectedDatabase || selectedConnection.database
+      const schemaName =
+        selectedConnection.type === 'postgresql'
+          ? queryExecution.querySchema || explorerData.selectedSchema || 'public'
+          : databaseName ?? ''
+      setDeleteTableTarget({
+        connectionId: selectedConnection.id,
+        connectionName: selectedConnection.name,
+        connectionType: selectedConnection.type,
+        database: databaseName ?? '',
+        schema: schemaName ?? '',
+        tableName,
+      })
+    },
+    handleRequestDeleteTableFromMenu: (connectionId: string, tableName: string) => {
+      const conn = items.find((item) => item.id === connectionId)
+      if (!conn) return
+      const databaseName = conn.database ?? ''
+      const schemaName = conn.type === 'postgresql' ? 'public' : databaseName
+      setDeleteTableTarget({
+        connectionId: conn.id,
+        connectionName: conn.name,
+        connectionType: conn.type,
+        database: databaseName,
+        schema: schemaName,
+        tableName,
+      })
+    },
+    handleCloseDeleteTableModal: () => {
+      setDeleteTableTarget(null)
     },
   }
 }

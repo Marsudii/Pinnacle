@@ -81,7 +81,9 @@ interface SqlExplorerWorkspaceProps {
   onCreateTable: (tableName: string) => Promise<void> | void
   onEditTable: (tableName: string, nextTableName: string) => Promise<void> | void
   onDeleteTable: (tableName: string) => Promise<void> | void
+  onRequestDeleteTable?: (tableName: string) => void
   onOpenDesigner?: (tableName: string) => void
+  onCreateInDesigner?: () => void
   onUpdateActiveQuery: (value: string) => void
   onSaveQuery: () => void
   onUseSavedQuery: (sql: string) => void
@@ -141,7 +143,9 @@ export function SqlExplorerWorkspace({
   onCreateTable,
   onEditTable,
   onDeleteTable,
+  onRequestDeleteTable,
   onOpenDesigner,
+  onCreateInDesigner,
   onUpdateActiveQuery,
   onSaveQuery,
   onUseSavedQuery,
@@ -443,7 +447,9 @@ export function SqlExplorerWorkspace({
           onCreateTable={onCreateTable}
           onEditTable={onEditTable}
           onDeleteTable={onDeleteTable}
+          onRequestDeleteTable={onRequestDeleteTable}
           onOpenDesigner={onOpenDesigner}
+          onCreateInDesigner={onCreateInDesigner}
         />
       )}
 

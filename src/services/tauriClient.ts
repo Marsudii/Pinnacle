@@ -6,6 +6,7 @@ import type {
   ElasticDocumentSearchResult,
   ElasticQueryResult,
   TableSchemaInfo,
+  DropTableResult,
 } from '../types/domain'
 
 export interface ConnectionPayload {
@@ -82,6 +83,17 @@ export async function sqlExecuteDdl(
     executedCount: number
     statements: { order: number; sql: string; success: boolean; error: string | null; elapsedMs: number }[]
   }>('sql_execute_ddl', { payload, plan })
+}
+
+export interface DropTableRequest {
+  connection: ConnectionPayload
+  schema: string
+  tableName: string
+  cascade: boolean
+}
+
+export async function sqlDropTable(payload: DropTableRequest) {
+  return invoke<DropTableResult>('sql_drop_table', { payload })
 }
 
 // ── Elasticsearch ───────────────────────────────────────────────

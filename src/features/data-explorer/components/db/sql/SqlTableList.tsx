@@ -7,13 +7,15 @@ interface SqlTableListProps {
   rows: SqlTableListItem[];
   loading: boolean;
   onSelectTable: (tableName: string) => void;
-  onCreateTable: (tableName: string) => Promise<void> | void;
+  onCreateTable?: (tableName: string) => Promise<void> | void;
   onEditTable: (
     tableName: string,
     nextTableName: string,
   ) => Promise<void> | void;
   onDeleteTable: (tableName: string) => Promise<void> | void;
+  onRequestDeleteTable?: (tableName: string) => void;
   onOpenDesigner?: (tableName: string) => void;
+  onCreateInDesigner?: () => void;
 }
 
 type SortField = "tableName" | "oid" | "owner" | "tableType" | "rowCount";
@@ -23,10 +25,11 @@ export function SqlTableList({
   rows,
   loading,
   onSelectTable,
-  onCreateTable,
   onEditTable,
   onDeleteTable,
+  onRequestDeleteTable,
   onOpenDesigner,
+  onCreateInDesigner,
 }: SqlTableListProps) {
   const [search, setSearch] = useState("");
   const [sortField, setSortField] = useState<SortField>("tableName");
@@ -34,11 +37,8 @@ export function SqlTableList({
   const [selectedTableName, setSelectedTableName] = useState<string | null>(
     null,
   );
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  const [createTableName, setCreateTableName] = useState("");
   const [showEditForm, setShowEditForm] = useState(false);
   const [nextTableName, setNextTableName] = useState("");
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -93,36 +93,12 @@ export function SqlTableList({
   const handleRowSelection = (tableName: string) => {
     setSelectedTableName((prev) => (prev === tableName ? null : tableName));
     setShowEditForm(false);
-    setShowDeleteConfirm(false);
     setActionError(null);
   };
 
   const resetInlineForms = () => {
-    setShowCreateForm(false);
     setShowEditForm(false);
-    setShowDeleteConfirm(false);
-    setCreateTableName("");
     setNextTableName("");
-  };
-
-  const handleCreateTable = async () => {
-    const trimmedName = createTableName.trim();
-    if (!trimmedName) {
-      setActionError("Table name is required");
-      return;
-    }
-
-    setActionLoading(true);
-    setActionError(null);
-    try {
-      await onCreateTable(trimmedName);
-      setSelectedTableName(trimmedName);
-      resetInlineForms();
-    } catch (error) {
-      setActionError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setActionLoading(false);
-    }
   };
 
   const handleEditTable = async () => {
@@ -162,6 +138,15 @@ export function SqlTableList({
     }
   };
 
+  const handleRequestDelete = () => {
+    if (!selectedTableName) return;
+    if (onRequestDeleteTable) {
+      onRequestDeleteTable(selectedTableName);
+    } else {
+      void handleDeleteTable();
+    }
+  };
+
   return (
     <section 
       className="flex h-full min-h-0 flex-col overflow-hidden bg-white"
@@ -169,7 +154,6 @@ export function SqlTableList({
         if (selectedTableName) {
           setSelectedTableName(null);
           setShowEditForm(false);
-          setShowDeleteConfirm(false);
           setActionError(null);
         }
       }}
@@ -179,10 +163,7 @@ export function SqlTableList({
           <button
             type="button"
             onClick={() => {
-              setShowCreateForm((prev) => !prev);
-              setShowEditForm(false);
-              setShowDeleteConfirm(false);
-              setActionError(null);
+              onCreateInDesigner?.();
             }}
             className="inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs text-blue-600 transition-colors hover:bg-slate-100"
           >
@@ -207,9 +188,8 @@ export function SqlTableList({
             <button
               type="button"
               onClick={() => {
-                setShowDeleteConfirm(true);
+                handleRequestDelete();
                 setShowEditForm(false);
-                setShowCreateForm(false);
                 setActionError(null);
               }}
               disabled={!selectedTableName}
@@ -232,45 +212,6 @@ export function SqlTableList({
           />
         </div>
       </div>
-
-      {showCreateForm && (
-        <div 
-          className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-1.5"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <input
-            type="text"
-            placeholder="New table name"
-            value={createTableName}
-            onChange={(event) => setCreateTableName(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                void handleCreateTable();
-              }
-            }}
-            className="w-64 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 placeholder:text-slate-400 focus:border-blue-400 focus:outline-none"
-          />
-          <button
-            type="button"
-            onClick={() => void handleCreateTable()}
-            disabled={actionLoading}
-            className="rounded bg-emerald-500 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-emerald-600 disabled:opacity-50"
-          >
-            Create
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setShowCreateForm(false);
-              setCreateTableName("");
-              setActionError(null);
-            }}
-            className="rounded px-2 py-1 text-xs text-slate-500 transition-colors hover:bg-slate-100"
-          >
-            Cancel
-          </button>
-        </div>
-      )}
 
       {showEditForm && selectedTableName && (
         <div 
@@ -316,33 +257,7 @@ export function SqlTableList({
         </div>
       )}
 
-      {showDeleteConfirm && selectedTableName && (
-        <div 
-          className="flex items-center justify-between gap-2 border-b border-red-200 bg-red-50 px-3 py-1.5 text-xs text-red-700"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <span>
-            Delete table <span className="font-mono">{selectedTableName}</span>?
-          </span>
-          <div className="inline-flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => void handleDeleteTable()}
-              disabled={actionLoading}
-              className="rounded bg-red-500 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-red-600 disabled:opacity-50"
-            >
-              Confirm
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowDeleteConfirm(false)}
-              className="rounded px-2 py-1 text-xs text-red-600 transition-colors hover:bg-red-50"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
+
 
       {actionError && (
         <div 

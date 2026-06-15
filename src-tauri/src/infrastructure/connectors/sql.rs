@@ -9,15 +9,20 @@ use sqlx::{
 use crate::{
     core::{error::AppError, result::AppResult},
     domain::query::{
-        ConnectionPayload, DdlExecutionResult, DdlPlan, DdlStatementResult, ForeignKeyConstraint,
-        IndexDefinition, PrimaryKeyConstraint, QueryResult, TableColumn, TableSchemaInfo,
-        UniqueConstraint,
+        ConnectionPayload, DdlExecutionResult, DdlPlan, DdlStatementResult, DropTablePayload,
+        DropTableResult, ForeignKeyConstraint, IndexDefinition, PrimaryKeyConstraint, QueryResult,
+        TableColumn, TableSchemaInfo, UniqueConstraint,
     },
 };
 
 /// Wrap an identifier in double-quotes, escaping any internal double-quotes.
 fn quote_identifier_pg(id: &str) -> String {
     format!("\"{}\"", id.replace('"', "\"\""))
+}
+
+/// Wrap an identifier in backticks, escaping any internal backticks.
+fn quote_identifier_mysql(id: &str) -> String {
+    format!("`{}`", id.replace('`', "``"))
 }
 
 fn ensure_supported_driver(driver: &str) -> AppResult<()> {
@@ -936,4 +941,139 @@ async fn execute_ddl_mysql(
         executed_count: results.len() as u32,
         statements: results,
     })
+}
+
+// ── Drop Table ─────────────────────────────────────────────────
+
+/// Generate a connector-specific `DROP TABLE` statement with safe identifier quoting.
+pub fn generate_drop_table_sql(driver: &str, schema: &str, table_name: &str, cascade: bool) -> String {
+    let fq_table = match driver {
+        "mysql" => {
+            if schema.is_empty() {
+                quote_identifier_mysql(table_name)
+            } else {
+                format!(
+                    "{}.{}",
+                    quote_identifier_mysql(schema),
+                    quote_identifier_mysql(table_name)
+                )
+            }
+        }
+        _ => {
+            // PostgreSQL: double-quote identifiers
+            if schema.is_empty() {
+                quote_identifier_pg(table_name)
+            } else {
+                format!(
+                    "{}.{}",
+                    quote_identifier_pg(schema),
+                    quote_identifier_pg(table_name)
+                )
+            }
+        }
+    };
+
+    let cascade_clause = if cascade { " CASCADE" } else { "" };
+    format!("DROP TABLE {}{};", fq_table, cascade_clause)
+}
+
+/// Validate drop-table request inputs and execute the drop.
+pub async fn drop_table(payload: &DropTablePayload) -> AppResult<DropTableResult> {
+    ensure_supported_driver(payload.connection.r#type.as_str())?;
+
+    if payload.table_name.trim().is_empty() {
+        return Err(AppError::InvalidInput(
+            "table_name must not be empty".to_string(),
+        ));
+    }
+
+    // Use connection schema as fallback when payload schema is empty
+    let schema = if payload.schema.is_empty() {
+        payload.connection.schema.clone()
+    } else {
+        payload.schema.clone()
+    };
+
+    let sql = generate_drop_table_sql(
+        &payload.connection.r#type,
+        &schema,
+        &payload.table_name,
+        payload.cascade,
+    );
+
+    let start = Instant::now();
+    let result = execute_sql(&payload.connection, &sql).await;
+    let elapsed = start.elapsed().as_millis();
+
+    match result {
+        Ok(_) => Ok(DropTableResult {
+            success: true,
+            sql,
+            elapsed_ms: elapsed,
+            error: None,
+        }),
+        Err(err) => Ok(DropTableResult {
+            success: false,
+            sql,
+            elapsed_ms: elapsed,
+            error: Some(err.to_string()),
+        }),
+    }
+}
+
+// ── Tests ────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn drop_table_pg_quoting() {
+        let sql = generate_drop_table_sql("postgresql", "public", "users", false);
+        assert_eq!(sql, "DROP TABLE \"public\".\"users\";");
+    }
+
+    #[test]
+    fn drop_table_pg_cascade() {
+        let sql = generate_drop_table_sql("postgresql", "public", "users", true);
+        assert_eq!(sql, "DROP TABLE \"public\".\"users\" CASCADE;");
+    }
+
+    #[test]
+    fn drop_table_pg_no_schema() {
+        let sql = generate_drop_table_sql("postgresql", "", "users", false);
+        assert_eq!(sql, "DROP TABLE \"users\";");
+    }
+
+    #[test]
+    fn drop_table_mysql_quoting() {
+        let sql = generate_drop_table_sql("mysql", "mydb", "users", false);
+        assert_eq!(sql, "DROP TABLE `mydb`.`users`;");
+    }
+
+    #[test]
+    fn drop_table_mysql_cascade() {
+        let sql = generate_drop_table_sql("mysql", "mydb", "users", true);
+        assert_eq!(sql, "DROP TABLE `mydb`.`users` CASCADE;");
+    }
+
+    #[test]
+    fn drop_table_mysql_no_schema() {
+        let sql = generate_drop_table_sql("mysql", "", "users", false);
+        assert_eq!(sql, "DROP TABLE `users`;");
+    }
+
+    #[test]
+    fn drop_table_pg_escaping() {
+        // Identifiers containing quotes should be escaped
+        let sql = generate_drop_table_sql("postgresql", "public", "my\"table", false);
+        assert_eq!(sql, "DROP TABLE \"public\".\"my\"\"table\";");
+    }
+
+    #[test]
+    fn drop_table_mysql_escaping() {
+        // Identifiers containing backticks should be escaped
+        let sql = generate_drop_table_sql("mysql", "my`db", "my`table", false);
+        assert_eq!(sql, "DROP TABLE `my``db`.`my``table`;");
+    }
 }
