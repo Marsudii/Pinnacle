@@ -36,3 +36,100 @@ pub struct QueryResult {
     pub columns: Vec<String>,
     pub rows: Vec<serde_json::Map<String, serde_json::Value>>,
 }
+
+// ── Table Schema Introspection Types ──────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TableSchemaInfo {
+    pub table_name: String,
+    pub schema: String,
+    pub columns: Vec<TableColumn>,
+    pub primary_key: Option<PrimaryKeyConstraint>,
+    pub unique_constraints: Vec<UniqueConstraint>,
+    pub foreign_keys: Vec<ForeignKeyConstraint>,
+    pub indexes: Vec<IndexDefinition>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TableColumn {
+    pub name: String,
+    pub data_type: String,
+    pub is_nullable: bool,
+    pub default_value: Option<String>,
+    pub is_auto_increment: bool,
+    pub comment: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrimaryKeyConstraint {
+    pub name: String,
+    pub columns: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UniqueConstraint {
+    pub name: String,
+    pub columns: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ForeignKeyConstraint {
+    pub name: String,
+    pub columns: Vec<String>,
+    pub referenced_table: String,
+    pub referenced_schema: String,
+    pub referenced_columns: Vec<String>,
+    pub on_update: String,
+    pub on_delete: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IndexDefinition {
+    pub name: String,
+    pub columns: Vec<String>,
+    pub is_unique: bool,
+    pub index_type: String,
+}
+
+// ── DDL Generation Types ─────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DdlPlan {
+    pub statements: Vec<DdlStatement>,
+    pub is_destructive: bool,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DdlStatement {
+    pub order: u32,
+    pub sql: String,
+    pub description: String,
+    pub is_destructive: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DdlExecutionResult {
+    pub success: bool,
+    pub executed_count: u32,
+    pub statements: Vec<DdlStatementResult>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DdlStatementResult {
+    pub order: u32,
+    pub sql: String,
+    pub success: bool,
+    pub error: Option<String>,
+    pub elapsed_ms: u128,
+}

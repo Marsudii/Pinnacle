@@ -1,4 +1,4 @@
-import { Copy, Download, Pencil, RefreshCw, Trash2, Unplug } from 'lucide-react'
+import { Copy, Download, Pencil, RefreshCw, TableProperties, Trash2, Unplug } from 'lucide-react'
 import type { ContextMenuState } from '../types'
 
 interface ContextMenuProps {
@@ -9,6 +9,7 @@ interface ContextMenuProps {
   onDuplicate: (itemId: string) => void
   onExport: (itemId: string) => void
   onDelete: (itemId: string) => void
+  onDesignTable?: (itemId: string) => void
   onClose: () => void
 }
 
@@ -20,6 +21,7 @@ export function ContextMenu({
   onDuplicate,
   onExport,
   onDelete,
+  onDesignTable,
   onClose,
 }: ContextMenuProps) {
   return (
@@ -37,6 +39,18 @@ export function ContextMenu({
       >
         <Pencil size={13} className="text-slate-400" /> Rename / Edit
       </button>
+      {onDesignTable && (
+        <button
+          type="button"
+          onClick={() => {
+            onDesignTable(state.itemId)
+            onClose()
+          }}
+          className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] text-slate-700 transition-colors hover:bg-slate-100 focus:outline-none focus:bg-slate-100"
+        >
+          <TableProperties size={13} className="text-slate-400" /> Edit Structure
+        </button>
+      )}
       <button
         type="button"
         onClick={() => {

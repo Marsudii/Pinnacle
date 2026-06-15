@@ -83,3 +83,51 @@ export interface ElasticQueryResult {
   elapsed_ms: number
   data: unknown
 }
+
+// ── SQL Table Schema Introspection Types ──────────────────────────
+
+export interface TableSchemaInfo {
+  tableName: string
+  schema: string
+  columns: TableColumn[]
+  primaryKey: PrimaryKeyConstraint | null
+  uniqueConstraints: UniqueConstraint[]
+  foreignKeys: ForeignKeyConstraint[]
+  indexes: IndexDefinition[]
+}
+
+export interface TableColumn {
+  name: string
+  dataType: string
+  isNullable: boolean
+  defaultValue: string | null
+  isAutoIncrement: boolean
+  comment: string | null
+}
+
+export interface PrimaryKeyConstraint {
+  name: string
+  columns: string[]
+}
+
+export interface UniqueConstraint {
+  name: string
+  columns: string[]
+}
+
+export interface ForeignKeyConstraint {
+  name: string
+  columns: string[]
+  referencedTable: string
+  referencedSchema: string
+  referencedColumns: string[]
+  onUpdate: string
+  onDelete: string
+}
+
+export interface IndexDefinition {
+  name: string
+  columns: string[]
+  isUnique: boolean
+  indexType: string
+}

@@ -8,6 +8,8 @@ import { ElasticExplorerWorkspace } from '../components/db/elasticsearch/Elastic
 import { MongodbWorkspaceNotice } from '../components/db/mongodb/MongodbWorkspaceNotice'
 import { ConnectionWizardModal } from '../components/ConnectionWizardModal'
 import { ContextMenu } from '../components/ContextMenu'
+import { TableDesignerModal } from '../components/table-designer/TableDesignerModal'
+import { useDesignerStore } from '../../../state/designerStore'
 import { executeSql } from '../../../services/tauriClient'
 import { getConnPayload, isSqlConnectionType, quoteIdentifier } from '../utils'
 import { useMemo } from 'react'
@@ -104,6 +106,20 @@ export function DataExplorerPage() {
     () => [...new Set(items.map((p) => p.tags[0]).filter(Boolean))].sort(),
     [items],
   )
+
+  // Designer store
+  const loadAndOpenForEdit = useDesignerStore((s) => s.loadAndOpenForEdit)
+
+  const handleOpenDesignerForEdit = async (tableName: string) => {
+    if (!selectedConnection || !isSqlConnectionType(selectedConnection.type)) return
+    const databaseName = queryExecution.queryDatabase || explorerData.selectedDatabase || selectedConnection.database
+    const schemaName =
+      selectedConnection.type === 'postgresql'
+        ? queryExecution.querySchema || explorerData.selectedSchema || 'public'
+        : databaseName ?? ''
+    const payload = { ...getConnPayload(selectedConnection), database: databaseName ?? '' }
+    await loadAndOpenForEdit(payload, tableName, databaseName ?? '', schemaName)
+  }
 
   const getSqlTableListContext = () => {
     if (!selectedConnection || !isSqlConnectionType(selectedConnection.type)) {
@@ -357,6 +373,7 @@ export function DataExplorerPage() {
                     onCreateTable={handleCreateTable}
                     onEditTable={handleEditTable}
                     onDeleteTable={handleDeleteTable}
+                    onOpenDesigner={handleOpenDesignerForEdit}
                     onUpdateActiveQuery={queryExecution.updateActiveQuery}
                     onSaveQuery={queryExecution.saveActiveQuery}
                     onUseSavedQuery={queryExecution.applySavedQueryToActiveTab}
@@ -451,6 +468,9 @@ export function DataExplorerPage() {
           onClose={handleCloseAddModal}
         />
       )}
+
+      {/* Table Designer Modal */}
+      <TableDesignerModal />
     </div>
   )
 }

@@ -5,6 +5,7 @@ import type {
   ElasticIndex,
   ElasticDocumentSearchResult,
   ElasticQueryResult,
+  TableSchemaInfo,
 } from '../types/domain'
 
 export interface ConnectionPayload {
@@ -37,6 +38,50 @@ export async function testConnection(payload: ConnectionPayload) {
 
 export async function executeSql(payload: SqlQueryPayload) {
   return invoke<QueryResult>('execute_sql', { payload })
+}
+
+// ── SQL Table Designer ───────────────────────────────────────────
+
+export interface SqlTableSchemaPayload {
+  payload: ConnectionPayload
+  tableName: string
+}
+
+export async function sqlGetTableSchema(
+  payload: ConnectionPayload,
+  tableName: string,
+) {
+  return invoke<TableSchemaInfo>('sql_get_table_schema', {
+    payload,
+    tableName,
+  })
+}
+
+export async function sqlGenerateDdl(
+  payload: ConnectionPayload,
+  current: TableSchemaInfo | null,
+  pending: TableSchemaInfo,
+) {
+  return invoke<{
+    statements: { order: number; sql: string; description: string; isDestructive: boolean }[]
+    isDestructive: boolean
+    warnings: string[]
+  }>('sql_generate_ddl', { payload, current, pending })
+}
+
+export async function sqlExecuteDdl(
+  payload: ConnectionPayload,
+  plan: {
+    statements: { order: number; sql: string; description: string; isDestructive: boolean }[]
+    isDestructive: boolean
+    warnings: string[]
+  },
+) {
+  return invoke<{
+    success: boolean
+    executedCount: number
+    statements: { order: number; sql: string; success: boolean; error: string | null; elapsedMs: number }[]
+  }>('sql_execute_ddl', { payload, plan })
 }
 
 // ── Elasticsearch ───────────────────────────────────────────────

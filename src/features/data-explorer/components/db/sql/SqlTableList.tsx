@@ -13,6 +13,7 @@ interface SqlTableListProps {
     nextTableName: string,
   ) => Promise<void> | void;
   onDeleteTable: (tableName: string) => Promise<void> | void;
+  onOpenDesigner?: (tableName: string) => void;
 }
 
 type SortField = "tableName" | "oid" | "owner" | "tableType" | "rowCount";
@@ -25,6 +26,7 @@ export function SqlTableList({
   onCreateTable,
   onEditTable,
   onDeleteTable,
+  onOpenDesigner,
 }: SqlTableListProps) {
   const [search, setSearch] = useState("");
   const [sortField, setSortField] = useState<SortField>("tableName");
@@ -123,15 +125,6 @@ export function SqlTableList({
     }
   };
 
-  const handleStartEdit = () => {
-    if (!selectedTableName) return;
-    setNextTableName(selectedTableName);
-    setShowDeleteConfirm(false);
-    setShowCreateForm(false);
-    setShowEditForm(true);
-    setActionError(null);
-  };
-
   const handleEditTable = async () => {
     if (!selectedTableName) return;
     const trimmedNext = nextTableName.trim();
@@ -200,8 +193,12 @@ export function SqlTableList({
           <>
             <button
               type="button"
-              onClick={handleStartEdit}
-              disabled={!selectedTableName}
+              onClick={() => {
+                if (selectedTableName && onOpenDesigner) {
+                  onOpenDesigner(selectedTableName)
+                }
+              }}
+              disabled={!selectedTableName || !onOpenDesigner}
               className="inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs text-slate-600 transition-colors hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
