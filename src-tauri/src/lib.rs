@@ -16,6 +16,9 @@ use application::commands::elastic_commands::{
     elastic_list_templates, elastic_list_pipelines, elastic_list_aliases,
     elastic_list_shards, elastic_get_nodes_info,
 };
+use application::commands::export_commands::{
+    estimate_table_export, execute_table_export,
+};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -30,6 +33,7 @@ pub fn run() {
       }
       Ok(())
     })
+    .plugin(tauri_plugin_dialog::init())
     .invoke_handler(tauri::generate_handler![
       test_connection, execute_sql, sql_get_table_schema,
       sql_generate_ddl, sql_execute_ddl, sql_drop_table,
@@ -41,6 +45,7 @@ pub fn run() {
       elastic_search_documents, elastic_index_document, elastic_delete_document,
       elastic_list_templates, elastic_list_pipelines, elastic_list_aliases,
       elastic_list_shards, elastic_get_nodes_info,
+      estimate_table_export, execute_table_export,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

@@ -87,6 +87,7 @@ interface SqlExplorerWorkspaceProps {
   onRequestDeleteTable?: (tableName: string) => void
   onOpenDesigner?: (tableName: string) => void
   onCreateInDesigner?: () => void
+  onExportData?: (tableName: string) => void
   onUpdateActiveQuery: (value: string) => void
   onSaveQuery: () => void
   onUseSavedQuery: (sql: string) => void
@@ -151,6 +152,7 @@ export function SqlExplorerWorkspace({
   onRequestDeleteTable,
   onOpenDesigner,
   onCreateInDesigner,
+  onExportData,
   onUpdateActiveQuery,
   onSaveQuery,
   onUseSavedQuery,
@@ -221,8 +223,8 @@ export function SqlExplorerWorkspace({
         label: 'Export',
         icon: FileDown,
         variant: 'secondary',
-        enabled: realTableRows.length > 0,
-        onClick: () => { /* TODO: wire export */ },
+        enabled: !!selectedTable && !!onExportData,
+        onClick: () => { if (selectedTable && onExportData) onExportData(selectedTable) },
       },
       {
         id: 'import-data',

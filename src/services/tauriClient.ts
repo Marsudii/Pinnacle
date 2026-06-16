@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
+import { save } from '@tauri-apps/plugin-dialog'
 import type {
   ElasticClusterInfo,
   ElasticClusterHealth,
@@ -238,4 +239,76 @@ export async function elasticListShards(payload: ConnectionPayload) {
 
 export async function elasticGetNodesInfo(payload: ConnectionPayload) {
   return invoke<unknown>('elastic_get_nodes_info', { payload })
+}
+
+// ── SQL Table Data Export ──────────────────────────────────────
+
+export interface TableExportEstimateResponse {
+  rowCount: number
+  estimatedSizeBytes: number
+  isLarge: boolean
+}
+
+export interface TableExportPayloadRequest {
+  connection: ConnectionPayload
+  tableName: string
+  format: string
+  options: {
+    includeHeaders: boolean
+    delimiter: string | null
+    encoding: string
+    sqlMode: string
+  }
+  savePath: string
+}
+
+export interface TableExportResultResponse {
+  success: boolean
+  filePath: string | null
+  rowCount: number
+  elapsedMs: number
+  background: boolean
+  error: string | null
+}
+
+export interface TableExportProgressEvent {
+  rowsExported: number
+  totalRows: number
+  done: boolean
+  error: string | null
+}
+
+export async function estimateTableExport(
+  conn: ConnectionPayload,
+  tableName: string,
+): Promise<TableExportEstimateResponse> {
+  return invoke<TableExportEstimateResponse>('estimate_table_export', {
+    connection: conn,
+    tableName,
+  })
+}
+
+export async function executeTableExport(
+  payload: TableExportPayloadRequest,
+): Promise<TableExportResultResponse> {
+  return invoke<TableExportResultResponse>('execute_table_export', { payload })
+}
+
+/**
+ * Show a native save dialog and return the chosen path, or null if cancelled.
+ */
+export async function showExportSaveDialog(
+  suggestedFilename: string,
+): Promise<string | null> {
+  // Extract the extension from the suggested filename for the file filter.
+  // Using extensions: ['*'] causes macOS to append a literal ".*" to the name.
+  const ext = suggestedFilename.includes('.')
+    ? suggestedFilename.split('.').pop() ?? '*'
+    : '*'
+  return save({
+    defaultPath: suggestedFilename,
+    filters: [
+      { name: 'All Files', extensions: [ext] },
+    ],
+  })
 }

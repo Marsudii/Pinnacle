@@ -10,6 +10,7 @@ import { ConnectionWizardModal } from '../components/ConnectionWizardModal'
 import { ContextMenu } from '../components/ContextMenu'
 import { DeleteTableModal } from '../components/DeleteTableModal'
 import { DataOperationModal } from '../components/DataOperationModal'
+import { ExportDataModal } from '../components/ExportDataModal'
 import { TableDesignerModal } from '../components/table-designer/TableDesignerModal'
 import { useDesignerStore } from '../../../state/designerStore'
 import { executeSql } from '../../../services/tauriClient'
@@ -110,6 +111,16 @@ export function DataExplorerPage() {
     dataOperationTarget,
     handleRequestDataOperationFromMenu,
     handleCloseDataOperationModal,
+
+    exportModalTarget,
+    exportEstimate,
+    exportJob,
+    recentExports,
+    handleRequestExport,
+    handleRequestExportFromMenu,
+    handleSubmitExport,
+    handleUseRecentExport,
+    handleCloseExportModal,
   } = useDataExplorerOrchestrator()
 
   // Derive unique existing groups from all connection profiles
@@ -415,6 +426,7 @@ export function DataExplorerPage() {
                     onRequestDeleteTable={handleRequestDeleteTable}
                     onOpenDesigner={handleOpenDesignerForEdit}
                     onCreateInDesigner={handleCreateInDesigner}
+                    onExportData={handleRequestExport}
                     onUpdateActiveQuery={queryExecution.updateActiveQuery}
                     onSaveQuery={queryExecution.saveActiveQuery}
                     onUseSavedQuery={queryExecution.applySavedQueryToActiveTab}
@@ -480,6 +492,7 @@ export function DataExplorerPage() {
               selectedConnection={selectedConnection}
               detailsStats={detailsStats}
               onClose={() => setIsDetailsPanelOpen(false)}
+              onExportData={() => handleRequestExport(explorerData.selectedTable ?? '')}
             />
           )}
         </div>
@@ -504,6 +517,9 @@ export function DataExplorerPage() {
             }}
             onTruncateTable={(connectionId, tableName) => {
               handleRequestDataOperationFromMenu(connectionId, tableName, 'truncate')
+            }}
+            onExportTable={(connectionId, tableName) => {
+              handleRequestExportFromMenu(connectionId, tableName)
             }}
             onClose={() => setContextMenu(null)}
           />
@@ -549,6 +565,19 @@ export function DataExplorerPage() {
             }
           }}
           onClose={handleCloseDeleteTableModal}
+        />
+      )}
+
+      {/* Export Data Modal */}
+      {exportModalTarget && (
+        <ExportDataModal
+          target={exportModalTarget}
+          estimate={exportEstimate}
+          job={exportJob}
+          recentExports={recentExports}
+          onSubmit={handleSubmitExport}
+          onUseRecent={handleUseRecentExport}
+          onClose={handleCloseExportModal}
         />
       )}
 

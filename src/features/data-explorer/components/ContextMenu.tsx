@@ -1,4 +1,4 @@
-import { Copy, Download, Eraser, Pencil, RefreshCw, Scissors, TableProperties, Trash2, Unplug } from 'lucide-react'
+import { Copy, Download, Eraser, FileDown, Pencil, RefreshCw, Scissors, TableProperties, Trash2, Unplug } from 'lucide-react'
 import { useLayoutEffect, useRef, useState } from 'react'
 import type { ContextMenuState } from '../types'
 
@@ -14,6 +14,7 @@ interface ContextMenuProps {
   onDeleteTable?: (itemId: string, tableName: string) => void
   onEmptyTable?: (itemId: string, tableName: string) => void
   onTruncateTable?: (itemId: string, tableName: string) => void
+  onExportTable?: (itemId: string, tableName: string) => void
   onClose: () => void
 }
 
@@ -29,6 +30,7 @@ export function ContextMenu({
   onDeleteTable,
   onEmptyTable,
   onTruncateTable,
+  onExportTable,
   onClose,
 }: ContextMenuProps) {
   const isTableContext = !!state.tableName
@@ -109,6 +111,18 @@ export function ContextMenu({
               className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] text-slate-700 transition-colors hover:bg-slate-100 focus:outline-none focus:bg-slate-100"
             >
               <Scissors size={13} className="text-slate-400" /> Truncate Table
+            </button>
+          )}
+          {onExportTable && (
+            <button
+              type="button"
+              onClick={() => {
+                onExportTable(state.itemId, state.tableName!)
+                onClose()
+              }}
+              className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] text-slate-700 transition-colors hover:bg-slate-100 focus:outline-none focus:bg-slate-100"
+            >
+              <FileDown size={13} className="text-slate-400" /> Export Data
             </button>
           )}
           {onDeleteTable && (

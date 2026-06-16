@@ -9,12 +9,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useConnectionStore } from '../../../state/connectionStore'
 import type { ConnectionProfile, ElasticIndex } from '../../../types/domain'
-import type { ConnectionStatus, ContextMenuState, DataOperationTarget, DeleteTableTarget, DetailStat } from '../types'
+import type { ConnectionStatus, ContextMenuState, DataOperationTarget, DeleteTableTarget, DetailStat, TableExportEstimate, TableExportJob, TableExportOptions, TableExportTarget, RecentTableExport } from '../types'
 import type { ElasticPanel, ElasticIndexTab } from '../components/db/elasticsearch/ElasticExplorerWorkspace'
-import { downloadTextFile } from '../utils'
+import { downloadTextFile, getConnPayload } from '../utils'
 import { useExplorerData } from './useExplorerData'
 import { useQueryExecution } from './useQueryExecution'
-import { elasticListIndices } from '../../../services/tauriClient'
+import { elasticListIndices, estimateTableExport, executeTableExport, showExportSaveDialog } from '../../../services/tauriClient'
+import type { TableExportProgressEvent } from '../../../services/tauriClient'
+import { listen } from '@tauri-apps/api/event'
 import {
   filterConnections,
   groupConnectionsByTag,
@@ -33,6 +35,29 @@ interface OpenedTableTab {
 /** Check if a connection type is ES-like (elasticsearch adapter). */
 function isElasticsearchLike(type: string): boolean {
   return hasCapability(defaultConnectorRegistry, type, 'run-query') && type === 'elasticsearch'
+}
+
+// ── Recent export history (localStorage) ────────────────────────
+
+const RECENT_EXPORTS_KEY = 'pinnacle_recent_table_exports'
+const MAX_RECENT_EXPORTS = 10
+
+function loadRecentExports(): RecentTableExport[] {
+  try {
+    const raw = localStorage.getItem(RECENT_EXPORTS_KEY)
+    if (!raw) return []
+    return JSON.parse(raw) as RecentTableExport[]
+  } catch {
+    return []
+  }
+}
+
+function persistRecentExports(exports: RecentTableExport[]) {
+  try {
+    localStorage.setItem(RECENT_EXPORTS_KEY, JSON.stringify(exports.slice(0, MAX_RECENT_EXPORTS)))
+  } catch {
+    // Ignore storage failures
+  }
 }
 
 export interface DataExplorerOrchestratorResult {
@@ -102,6 +127,16 @@ export interface DataExplorerOrchestratorResult {
   handleRequestDataOperationFromMenu: (connectionId: string, tableName: string, operation: 'empty' | 'truncate') => void
   handleCloseDataOperationModal: () => void
   setExpandedConnectionId: (id: string | null) => void
+  // ── Table export ──
+  exportModalTarget: TableExportTarget | null
+  exportEstimate: TableExportEstimate
+  exportJob: TableExportJob
+  recentExports: RecentTableExport[]
+  handleRequestExport: (tableName: string) => void
+  handleRequestExportFromMenu: (connectionId: string, tableName: string) => void
+  handleSubmitExport: (target: TableExportTarget, options: TableExportOptions) => Promise<void>
+  handleUseRecentExport: (recent: RecentTableExport) => void
+  handleCloseExportModal: () => void
   setContextMenu: (state: ContextMenuState | null) => void
   setSelectedTreeNode: (node: string | null) => void
   setElasticPanel: (panel: ElasticPanel) => void
@@ -151,6 +186,58 @@ export function useDataExplorerOrchestrator(): DataExplorerOrchestratorResult {
   const [isResizing, setIsResizing] = useState(false)
   const [deleteTableTarget, setDeleteTableTarget] = useState<DeleteTableTarget | null>(null)
   const [dataOperationTarget, setDataOperationTarget] = useState<DataOperationTarget | null>(null)
+
+  // ── Export state ───────────────────────────────────────────────
+  const [exportModalTarget, setExportModalTarget] = useState<TableExportTarget | null>(null)
+  const [exportEstimate, setExportEstimate] = useState<TableExportEstimate>({
+    rowCount: null, estimatedSizeBytes: null, loading: false, error: null,
+  })
+  const [exportJob, setExportJob] = useState<TableExportJob>({
+    status: 'idle', progress: null, savedPath: null, error: null,
+  })
+  const [recentExports, setRecentExports] = useState<RecentTableExport[]>(() => loadRecentExports())
+  const exportProgressUnlistenRef = useRef<(() => void) | null>(null)
+
+  // ── Trigger estimate when export modal opens ─────────────────
+  useEffect(() => {
+    if (!exportModalTarget) return
+
+    const conn = items.find((item) => item.id === exportModalTarget.connectionId)
+    if (!conn) return
+
+    const payload = { ...getConnPayload(conn, exportModalTarget.schema), database: exportModalTarget.database || conn.database }
+    let cancelled = false
+
+    setExportEstimate((prev) => ({ ...prev, loading: true, error: null }))
+
+    estimateTableExport(payload, exportModalTarget.tableName)
+      .then((result) => {
+        if (cancelled) return
+        setExportEstimate({
+          rowCount: result.rowCount,
+          estimatedSizeBytes: result.estimatedSizeBytes,
+          loading: false,
+          error: null,
+        })
+      })
+      .catch((err) => {
+        if (cancelled) return
+        setExportEstimate({
+          rowCount: null, estimatedSizeBytes: null, loading: false,
+          error: err instanceof Error ? err.message : String(err),
+        })
+      })
+
+    return () => { cancelled = true }
+  }, [exportModalTarget, items])
+
+  // ── Cleanup progress listener on unmount ──────────────────────
+  useEffect(() => {
+    return () => {
+      exportProgressUnlistenRef.current?.()
+      exportProgressUnlistenRef.current = null
+    }
+  }, [])
 
   // ── Derived state (via domain services) ──────────────────────────
 
@@ -796,6 +883,157 @@ export function useDataExplorerOrchestrator(): DataExplorerOrchestratorResult {
     },
     handleCloseDataOperationModal: () => {
       setDataOperationTarget(null)
+    },
+
+    // ── Table export ────────────────────────────────────────────
+
+    exportModalTarget,
+    exportEstimate,
+    exportJob,
+    recentExports,
+
+    handleRequestExport: (tableName: string) => {
+      if (!selectedConnection) return
+      const databaseName = queryExecution.queryDatabase || explorerData.selectedDatabase || selectedConnection.database
+      const schemaName =
+        selectedConnection.type === 'postgresql'
+          ? queryExecution.querySchema || explorerData.selectedSchema || 'public'
+          : databaseName ?? ''
+      setExportModalTarget({
+        connectionId: selectedConnection.id,
+        connectionName: selectedConnection.name,
+        connectionType: selectedConnection.type,
+        database: databaseName ?? '',
+        schema: schemaName ?? '',
+        tableName,
+      })
+      setExportEstimate({ rowCount: null, estimatedSizeBytes: null, loading: false, error: null })
+      setExportJob({ status: 'idle', progress: null, savedPath: null, error: null })
+    },
+
+    handleRequestExportFromMenu: (connectionId: string, tableName: string) => {
+      const conn = items.find((item) => item.id === connectionId)
+      if (!conn) return
+      const databaseName = conn.database ?? ''
+      const schemaName = conn.type === 'postgresql' ? 'public' : databaseName
+      setExportModalTarget({
+        connectionId: conn.id,
+        connectionName: conn.name,
+        connectionType: conn.type,
+        database: databaseName,
+        schema: schemaName,
+        tableName,
+      })
+      setExportEstimate({ rowCount: null, estimatedSizeBytes: null, loading: false, error: null })
+      setExportJob({ status: 'idle', progress: null, savedPath: null, error: null })
+    },
+
+    handleSubmitExport: async (target: TableExportTarget, options: TableExportOptions) => {
+      const conn = items.find((item) => item.id === target.connectionId)
+      if (!conn) {
+        setExportJob({ status: 'error', progress: null, savedPath: null, error: 'Connection not found' })
+        return
+      }
+
+      // 1. Show native save dialog with suggested filename
+      const ext = options.format === 'xlsx' ? 'xlsx' : options.format
+      const nameParts = [target.connectionName, target.database, target.schema, target.tableName]
+        .filter(Boolean)
+        .map((p) => p.replaceAll(/[^a-zA-Z0-9_-]/g, '_'))
+      const suggestedName = `${nameParts.join('_')}.${ext}`
+
+      const savePath = await showExportSaveDialog(suggestedName)
+      if (!savePath) {
+        // User cancelled the save dialog
+        return
+      }
+
+      // 2. Set loading state
+      setExportJob({ status: 'exporting', progress: 0, savedPath: null, error: null })
+
+      // 3. Listen for progress events
+      const unlisten = await listen<TableExportProgressEvent>('export://progress', (event) => {
+        const progress = event.payload
+        if (progress.totalRows > 0) {
+          const pct = Math.round((progress.rowsExported / progress.totalRows) * 100)
+          setExportJob((prev) => ({ ...prev, progress: pct }))
+        }
+        if (progress.error) {
+          setExportJob({
+            status: 'error', progress: null, savedPath: null,
+            error: progress.error,
+          })
+        }
+      })
+      exportProgressUnlistenRef.current = unlisten
+
+      // 4. Build payload for Rust command (convert frontend values to Rust-expected format)
+      const connection = { ...getConnPayload(conn, target.schema), database: target.database || conn.database }
+      const rustFormat = options.format.toUpperCase()
+      const rustEncoding = options.encoding === 'utf-8' ? 'UTF8' : options.encoding === 'utf-16' ? 'UTF16' : 'ASCII'
+      const rustSqlMode = options.sqlMode === 'data-only' ? 'dataOnly' : options.sqlMode === 'schema-only' ? 'schemaOnly' : 'schemaAndData'
+      const payload = {
+        connection,
+        tableName: target.tableName,
+        format: rustFormat,
+        options: {
+          includeHeaders: options.includeHeaders,
+          delimiter: options.format === 'txt' ? options.txtDelimiter : null,
+          encoding: rustEncoding,
+          sqlMode: rustSqlMode,
+        },
+        savePath,
+      }
+
+      try {
+        const result = await executeTableExport(payload)
+
+        // 5. Cleanup progress listener
+        unlisten()
+        exportProgressUnlistenRef.current = null
+
+        if (result.success) {
+          const savedFilePath = result.filePath ?? savePath
+          const record: RecentTableExport = {
+            id: crypto.randomUUID(),
+            timestamp: new Date().toISOString(),
+            target,
+            options,
+            savedPath: savedFilePath,
+          }
+          setRecentExports((prev) => {
+            const next = [record, ...prev].slice(0, MAX_RECENT_EXPORTS)
+            persistRecentExports(next)
+            return next
+          })
+          setExportJob({ status: 'success', progress: 100, savedPath: savedFilePath, error: null })
+        } else {
+          setExportJob({
+            status: 'error', progress: null, savedPath: null,
+            error: result.error ?? 'Export failed',
+          })
+        }
+      } catch (err) {
+        // Cleanup progress listener on error
+        unlisten()
+        exportProgressUnlistenRef.current = null
+
+        setExportJob({
+          status: 'error', progress: null, savedPath: null,
+          error: err instanceof Error ? err.message : String(err),
+        })
+      }
+    },
+
+    handleUseRecentExport: (recent: RecentTableExport) => {
+      setExportModalTarget(recent.target)
+      setExportEstimate({ rowCount: null, estimatedSizeBytes: null, loading: false, error: null })
+      setExportJob({ status: 'idle', progress: null, savedPath: null, error: null })
+    },
+
+    handleCloseExportModal: () => {
+      setExportModalTarget(null)
+      setExportJob({ status: 'idle', progress: null, savedPath: null, error: null })
     },
   }
 }
